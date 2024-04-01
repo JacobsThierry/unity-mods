@@ -279,12 +279,23 @@ namespace Assistant
             }
 
             float gapBehind = vehicle.timer.gapToBehind;
+            
+            RacingVehicle vehicleBeheind = vehicle.behind;
+
+
+            //I can't find how to check if a vehicle has crashed, but movementEnabled seems to be false if a vehicle has crashed
+            // So I will use that i guess
+            if (! (vehicle.behind == null) && !vehicleBeheind.movementEnabled)
+            {
+                gapBehind = 999f;
+            }
 
             if (vehicle.standingsPosition != Game.instance.sessionManager.GetVehicleCount() && vehicle.behind.driver.contract.GetTeam().teamID == teamID)
             {
                 gapBehind = 999f;
             }
 
+            
 
 
             //If the car is first or last only use one gap
@@ -336,7 +347,7 @@ namespace Assistant
 
                 float minGap = Assistant.getMinGap(vehicle);
 
-                if (minGap < 0.4f)
+                if (minGap < 0.5f)
                 {
                     t = 0.7f;
                 }
