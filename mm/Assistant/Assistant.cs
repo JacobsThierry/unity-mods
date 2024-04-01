@@ -482,13 +482,15 @@ namespace Assistant
                     //Edge case when first or last of race
                     float gapAhead = vehicle.timer.gapToAhead;
                     float gapBehind = vehicle.timer.gapToBehind;
-                    if (gapAhead == 0)
-                    {
-                        gapAhead = gapBehind;
-                    }
-                    if (gapBehind == 0)
+
+                    //If the car is first or last only use one gap
+                    if (vehicle.standingsPosition == Game.instance.sessionManager.GetVehicleCount())
                     {
                         gapBehind = gapAhead;
+                    }
+                    if (vehicle.standingsPosition == 1)
+                    {
+                        gapAhead = gapBehind;
                     }
 
                     float minGap = Math.Min(gapAhead, gapBehind);
@@ -597,16 +599,22 @@ namespace Assistant
                 {
                     float gapAhead = vehicle.timer.gapToAhead;
                     float gapBehind = vehicle.timer.gapToBehind;
-                    if (gapAhead == 0)
-                    {
-                        gapAhead = gapBehind;
-                    }
-                    if (gapBehind == 0)
+
+                    //If the car is first or last only use one gap
+                    if(vehicle.standingsPosition == Game.instance.sessionManager.GetVehicleCount())
                     {
                         gapBehind = gapAhead;
                     }
+                    if(vehicle.standingsPosition == 1)
+                    {
+                        gapAhead = gapBehind;
+                    }
+
+                    
 
                     float minGap = Math.Min(gapAhead, gapBehind);
+
+                    
 
                     if (minGap < 0.7f)
                     {
