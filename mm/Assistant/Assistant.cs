@@ -308,7 +308,7 @@ namespace Assistant
 
                 float minGap = Math.Min(gapAhead, gapBehind);
 
-                if (minGap < 0.3f)
+                if (minGap < 0.4f)
                 {
                     t = 0.7f;
                 }
@@ -617,7 +617,7 @@ namespace Assistant
 
                     
 
-                    if (minGap < 0.3f)
+                    if (minGap < 0.4f)
                     {
                         if (vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
                         {
@@ -631,12 +631,12 @@ namespace Assistant
                     else
                     {
                         //Save more fuel than in non-smart mode
-                        if (fuelLapsRemainingDecimal > lapLeft * 0.95) 
+                        if (fuelLapsRemainingDecimal > lapLeft * 1.2) 
                         {
                             mode = Fuel.EngineMode.High;
 
                         }
-                        else if (fuelLapsRemainingDecimal > lapLeft * 0.9)
+                        else if (fuelLapsRemainingDecimal > lapLeft * 1)
                         {
                             mode = Fuel.EngineMode.Medium;
                         }
