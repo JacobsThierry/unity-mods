@@ -1026,10 +1026,11 @@ namespace Assistant
                     Main.settings.driver2AssistOptions.pitstopOnLap = value;
                 }*/
 
-                var pitQueue = new Queue<float>(Main.settings.driver1AssistOptions.nextPitstops);
+                
 
                 if (vehicle.carID == 0 && Main.settings.driver1AssistOptions.engine && Main.settings.driver1AssistOptions.plannedPitstop)
                 {
+                    var pitQueue = new Queue<float>(Main.settings.driver1AssistOptions.nextPitstops);
                     if (pitQueue.Count == 0)
                     {
                         Main.settings.driver1AssistOptions.plannedPitstop = false;
@@ -1043,6 +1044,7 @@ namespace Assistant
                 }
                 if (vehicle.carID == 1 && Main.settings.driver2AssistOptions.engine && Main.settings.driver2AssistOptions.plannedPitstop)
                 {
+                    var pitQueue = new Queue<float>(Main.settings.driver2AssistOptions.nextPitstops);
                     if (pitQueue.Count == 0)
                     {
                         Main.settings.driver2AssistOptions.plannedPitstop = false;
