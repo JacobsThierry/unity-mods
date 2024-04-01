@@ -530,7 +530,7 @@ namespace Assistant
 
             float lapLeft = GetLapsRemainingDecimal(vehicle);
 
-            if (options.plannedPitstop)
+            if (options.plannedPitstop && vehicle.championship.rules.isRefuelingOn)
             {
                 int lap = vehicle.timer.lap;
                 float num = vehicle.pathController.distanceAlongTrackPath01;
