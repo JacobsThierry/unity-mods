@@ -325,12 +325,12 @@ namespace Assistant
             else if (temp < t - 0.2f)
             {
                 if (tempChangeRate < changeRate2)
-                    mode = GetIncreaseDrivingStyle(mode);
+                    mode = GetIncreaseDrivingStyle(GetIncreaseDrivingStyle(mode));
             }
             else if (temp > t + 0.2f)
             {
                 if (tempChangeRate > -changeRate2)
-                    mode = GetDecreaseDrivingStyle(mode);
+                    mode = GetDecreaseDrivingStyle(GetDecreaseDrivingStyle(mode));
             }
             else if (temp < t)
             {
