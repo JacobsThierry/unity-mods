@@ -264,6 +264,45 @@ namespace Assistant
             public DateTime time;
         }
 
+
+        internal static float getMinGap(RacingVehicle vehicle)
+        {
+
+            int teamID = vehicle.driver.contract.GetTeam().teamID;
+            float gapAhead = vehicle.timer.gapToAhead;
+            
+
+            //Prevent fighting teammate
+            if (vehicle.standingsPosition != 1 && vehicle.ahead.driver.contract.GetTeam().teamID == teamID)
+            {
+                gapAhead = 999f;
+            }
+
+            float gapBehind = vehicle.timer.gapToBehind;
+
+            if (vehicle.standingsPosition != Game.instance.sessionManager.GetVehicleCount() && vehicle.behind.driver.contract.GetTeam().teamID == teamID)
+            {
+                gapBehind = 999f;
+            }
+
+
+
+            //If the car is first or last only use one gap
+            if (vehicle.standingsPosition == Game.instance.sessionManager.GetVehicleCount())
+            {
+                gapBehind = gapAhead;
+            }
+            if (vehicle.standingsPosition == 1)
+            {
+                gapAhead = gapBehind;
+            }
+
+            float minGap = Math.Min(gapAhead, gapBehind);
+
+            return minGap;
+        }
+
+
         internal static readonly TyreLog tyre1 = new TyreLog();
         internal static readonly TyreLog tyre2 = new TyreLog();
 
@@ -294,19 +333,8 @@ namespace Assistant
 
             if (options.autoTyre)
             {
-                float gapAhead = vehicle.timer.gapToAhead;
-                float gapBehind = vehicle.timer.gapToBehind;
-                //If the car is first or last only use one gap
-                if (vehicle.standingsPosition == Game.instance.sessionManager.GetVehicleCount())
-                {
-                    gapBehind = gapAhead;
-                }
-                if (vehicle.standingsPosition == 1)
-                {
-                    gapAhead = gapBehind;
-                }
 
-                float minGap = Math.Min(gapAhead, gapBehind);
+                float minGap = Assistant.getMinGap(vehicle);
 
                 if (minGap < 0.4f)
                 {
@@ -480,21 +508,9 @@ namespace Assistant
                 if (vehicle.ERSController.GetNormalizedCooldown(ERSController.Mode.Power) == 0)
                 {
 
-                    //Edge case when first or last of race
-                    float gapAhead = vehicle.timer.gapToAhead;
-                    float gapBehind = vehicle.timer.gapToBehind;
 
-                    //If the car is first or last only use one gap
-                    if (vehicle.standingsPosition == Game.instance.sessionManager.GetVehicleCount())
-                    {
-                        gapBehind = gapAhead;
-                    }
-                    if (vehicle.standingsPosition == 1)
-                    {
-                        gapAhead = gapBehind;
-                    }
 
-                    float minGap = Math.Min(gapAhead, gapBehind);
+                    float minGap = Assistant.getMinGap(vehicle);
 
                     //If we're about to get overtaken or if we're stuck beheind a car we active power mode
                     // Let's say that 1% power =~ 0.01 secs
@@ -598,24 +614,7 @@ namespace Assistant
                 }
                 else //Otherwise, save fuel if we're not fighting for a position
                 {
-                    float gapAhead = vehicle.timer.gapToAhead;
-                    float gapBehind = vehicle.timer.gapToBehind;
-
-                    //If the car is first or last only use one gap
-                    if(vehicle.standingsPosition == Game.instance.sessionManager.GetVehicleCount())
-                    {
-                        gapBehind = gapAhead;
-                    }
-                    if(vehicle.standingsPosition == 1)
-                    {
-                        gapAhead = gapBehind;
-                    }
-
-                    
-
-                    float minGap = Math.Min(gapAhead, gapBehind);
-
-                    
+                    float minGap = Assistant.getMinGap(vehicle);
 
                     if (minGap < 0.4f)
                     {
