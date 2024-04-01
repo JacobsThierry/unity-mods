@@ -308,7 +308,7 @@ namespace Assistant
 
                 float minGap = Math.Min(gapAhead, gapBehind);
 
-                if (minGap < 0.7f)
+                if (minGap < 0.3f)
                 {
                     t = 0.7f;
                 }
@@ -617,7 +617,7 @@ namespace Assistant
 
                     
 
-                    if (minGap < 0.7f)
+                    if (minGap < 0.3f)
                     {
                         if (vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
                         {
