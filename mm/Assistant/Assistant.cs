@@ -345,15 +345,20 @@ namespace Assistant
             if (options.autoTyre)
             {
 
+                
                 float minGap = Assistant.getMinGap(vehicle);
 
                 if (minGap < 0.6f)
                 {
                     t = 0.7f;
+                    if (vehicle.timer.currentSector == Game.instance.sessionManager.yellowFlagSector && Game.instance.sessionManager.flag == SessionManager.Flag.Yellow)
+                    {
+                        t = 0.1f;
+                    }
                 }
                 else
                 {
-                    t = 0.3f;
+                    t = 0.1f; 
                 }
 
             }
@@ -510,7 +515,7 @@ namespace Assistant
                     return;
                 }
 
-                if (vehicle.timer.currentSector == Game.instance.sessionManager.yellowFlagSector)
+                if (vehicle.timer.currentSector == Game.instance.sessionManager.yellowFlagSector && Game.instance.sessionManager.flag == SessionManager.Flag.Yellow)
                 {
                     return;
                 }
@@ -629,7 +634,11 @@ namespace Assistant
 
                     if (minGap < 0.4f)
                     {
-                        if (vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
+                        if (vehicle.timer.currentSector == Game.instance.sessionManager.yellowFlagSector && Game.instance.sessionManager.flag == SessionManager.Flag.Yellow)
+                        {
+                            mode = Fuel.EngineMode.Low; //We can't fight if there's a yellow flag so we save fuel
+                        }
+                        else if (vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
                         {
                             mode = Fuel.EngineMode.SuperOvertake;
                         }
