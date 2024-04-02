@@ -270,7 +270,7 @@ namespace Assistant
 
             int teamID = vehicle.driver.contract.GetTeam().teamID;
             float gapAhead = vehicle.timer.gapToAhead;
-            
+
 
             //Prevent fighting teammate
             if (vehicle.standingsPosition != 1 && vehicle.ahead.driver.contract.GetTeam().teamID == teamID)
@@ -279,13 +279,13 @@ namespace Assistant
             }
 
             float gapBehind = vehicle.timer.gapToBehind;
-            
+
             RacingVehicle vehicleBeheind = vehicle.behind;
 
 
             //I can't find how to check if a vehicle has crashed, but movementEnabled seems to be false if a vehicle has crashed
             // So I will use that i guess
-            if (! (vehicle.behind == null) && !vehicleBeheind.movementEnabled)
+            if (!(vehicle.behind == null) && !vehicleBeheind.movementEnabled)
             {
                 gapBehind = 999f;
             }
@@ -295,7 +295,7 @@ namespace Assistant
                 gapBehind = 999f;
             }
 
-            
+
 
 
             //If the car is first or last only use one gap
@@ -347,7 +347,7 @@ namespace Assistant
 
                 float minGap = Assistant.getMinGap(vehicle);
 
-                if (minGap < 0.5f)
+                if (minGap < 0.6f)
                 {
                     t = 0.7f;
                 }
@@ -619,11 +619,11 @@ namespace Assistant
                     mode = Fuel.EngineMode.SuperOvertake;
 
                 }
-                else if (fuelLapsRemainingDecimal > lapLeft * 1.3f)
+                else if (fuelLapsRemainingDecimal > lapLeft * 1.35f)
                 {
                     mode = Fuel.EngineMode.Overtake;
                 }
-                else //Otherwise, save fuel if we're not fighting for a position
+                else //Otherwise, burn fuel if we're fighting for a position and save it if we're not
                 {
                     float minGap = Assistant.getMinGap(vehicle);
 
@@ -641,7 +641,7 @@ namespace Assistant
                     else
                     {
                         //Save more fuel than in non-smart mode
-                        if (fuelLapsRemainingDecimal > lapLeft * 1.2) 
+                        if (fuelLapsRemainingDecimal > lapLeft * 1.2)
                         {
                             mode = Fuel.EngineMode.High;
 
@@ -669,7 +669,15 @@ namespace Assistant
 
             if (vehicle.timer.lap == 0 && options.boostEngine)
             {
-                mode = Fuel.EngineMode.Overtake;
+                if (vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
+                {
+                    mode = Fuel.EngineMode.SuperOvertake;
+                }
+                else
+                {
+
+                    mode = Fuel.EngineMode.Overtake;
+                }
             }
 
 
@@ -1045,7 +1053,7 @@ namespace Assistant
                     Main.settings.driver2AssistOptions.pitstopOnLap = value;
                 }*/
 
-                
+
 
                 if (vehicle.carID == 0 && Main.settings.driver1AssistOptions.engine && Main.settings.driver1AssistOptions.plannedPitstop)
                 {
