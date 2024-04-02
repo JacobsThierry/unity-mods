@@ -351,14 +351,15 @@ namespace Assistant
                 if (minGap < 0.6f)
                 {
                     t = 0.7f;
-                    if (vehicle.timer.currentSector == Game.instance.sessionManager.yellowFlagSector && Game.instance.sessionManager.flag == SessionManager.Flag.Yellow)
-                    {
-                        t = 0.1f;
-                    }
                 }
                 else
                 {
-                    t = 0.1f; 
+                    t = 0.2f; 
+                }
+
+                if (vehicle.timer.currentSector == Game.instance.sessionManager.yellowFlagSector && Game.instance.sessionManager.flag == SessionManager.Flag.Yellow)
+                {
+                    t = 0.1f;
                 }
 
             }
@@ -615,7 +616,7 @@ namespace Assistant
             {
 
                 //If we don't have enough fuel, save it. If we have too much fuel, use it
-                if (fuelLapsRemainingDecimal < lapLeft * 0.8f)
+                if (fuelLapsRemainingDecimal < lapLeft * 0.85f) 
                 {
                     mode = Fuel.EngineMode.Low;
                 }
@@ -632,7 +633,7 @@ namespace Assistant
                 {
                     float minGap = Assistant.getMinGap(vehicle);
 
-                    if (minGap < 0.4f)
+                    if (minGap < 0.3f)
                     {
                         if (vehicle.timer.currentSector == Game.instance.sessionManager.yellowFlagSector && Game.instance.sessionManager.flag == SessionManager.Flag.Yellow)
                         {
@@ -713,7 +714,7 @@ namespace Assistant
     {
         static void Prefix(SessionStrategy __instance, RacingVehicle ___mVehicle, int inGateID, PathData.GateType inGateType)
         {
-            if (!Main.enabled || inGateID % 5 != 0) return;
+            if (!Main.enabled || inGateID % 2 != 0) return;
 
             var sessionType = Game.instance.sessionManager.eventDetails.currentSession.sessionType;
             var vehicle = ___mVehicle;
@@ -735,14 +736,14 @@ namespace Assistant
                 if (vehicle.carID == 0)
                 {
                     Assistant.AssistDrive(Main.settings.driver1AssistOptions, vehicle, Assistant.tyre1);
-                    if (inGateID % 30 == 0)
+                    if (inGateID % 10 == 0)
                         Assistant.AssistEngine(Main.settings.driver1AssistOptions, vehicle);
                     Assistant.AssistERS(Main.settings.driver1AssistOptions, vehicle);
                 }
                 else if (vehicle.carID == 1)
                 {
                     Assistant.AssistDrive(Main.settings.driver2AssistOptions, vehicle, Assistant.tyre2);
-                    if (inGateID % 30 == 0)
+                    if (inGateID % 10 == 0)
                         Assistant.AssistEngine(Main.settings.driver2AssistOptions, vehicle);
                     Assistant.AssistERS(Main.settings.driver2AssistOptions, vehicle);
                 }
