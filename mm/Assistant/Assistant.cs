@@ -345,21 +345,28 @@ namespace Assistant
             if (options.autoTyre)
             {
 
-                
-                float minGap = Assistant.getMinGap(vehicle);
-
-                if (minGap < 0.6f)
+                if (Game.instance.sessionManager.eventDetails.currentSession.sessionType == SessionDetails.SessionType.Practice)
                 {
-                    t = 0.7f;
+                    t = 0.5f;
                 }
                 else
                 {
-                    t = 0.2f; 
-                }
 
-                if (vehicle.timer.currentSector == Game.instance.sessionManager.yellowFlagSector && Game.instance.sessionManager.flag == SessionManager.Flag.Yellow)
-                {
-                    t = 0.1f;
+                    float minGap = Assistant.getMinGap(vehicle);
+
+                    if (minGap < 0.6f)
+                    {
+                        t = 0.75f;
+                    }
+                    else
+                    {
+                        t = 0.25f;
+                    }
+
+                    if (vehicle.timer.currentSector == Game.instance.sessionManager.yellowFlagSector && Game.instance.sessionManager.flag == SessionManager.Flag.Yellow)
+                    {
+                        t = 0.05f;
+                    }
                 }
 
             }
@@ -537,6 +544,7 @@ namespace Assistant
                     }
                     else
                     {
+
                         //If we're full on power we use it
                         if (vehicle.ERSController.normalizedCharge > 0.90)
                         {
@@ -576,16 +584,19 @@ namespace Assistant
                 }
 
                 float diff = options.pitstopOnLap - (float)lap;
-                if (diff < 0)
-                {
-                    diff = 1;
-                }
+
                 lapLeft = diff - num;
+                if (lapLeft < 0)
+                {
+                    lapLeft = 1;
+                }
             }
             else
             {
                 lapLeft = lapLeft + options.fuel;
             }
+
+
 
             if (!options.smartEngine)
             {
@@ -594,7 +605,7 @@ namespace Assistant
                     mode = Fuel.EngineMode.SuperOvertake;
 
                 }
-                else if (fuelLapsRemainingDecimal > lapLeft * 1.3f)
+                else if (fuelLapsRemainingDecimal > lapLeft * 1.35f)
                 {
                     mode = Fuel.EngineMode.Overtake;
                 }
@@ -615,8 +626,14 @@ namespace Assistant
             else
             {
 
+
+
                 //If we don't have enough fuel, save it. If we have too much fuel, use it
-                if (fuelLapsRemainingDecimal < lapLeft * 0.85f) 
+                if (fuelLapsRemainingDecimal < lapLeft * 0.9f)
+                {
+                    mode = Fuel.EngineMode.Medium;
+                }
+                else if (fuelLapsRemainingDecimal < lapLeft * 0.85f)
                 {
                     mode = Fuel.EngineMode.Low;
                 }
@@ -625,7 +642,7 @@ namespace Assistant
                     mode = Fuel.EngineMode.SuperOvertake;
 
                 }
-                else if (fuelLapsRemainingDecimal > lapLeft * 1.35f)
+                else if (fuelLapsRemainingDecimal > lapLeft * 1.35f && !vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
                 {
                     mode = Fuel.EngineMode.Overtake;
                 }
@@ -633,7 +650,7 @@ namespace Assistant
                 {
                     float minGap = Assistant.getMinGap(vehicle);
 
-                    if (minGap < 0.3f)
+                    if (minGap < 0.5f)
                     {
                         if (vehicle.timer.currentSector == Game.instance.sessionManager.yellowFlagSector && Game.instance.sessionManager.flag == SessionManager.Flag.Yellow)
                         {
@@ -651,7 +668,11 @@ namespace Assistant
                     else
                     {
                         //Save more fuel than in non-smart mode
-                        if (fuelLapsRemainingDecimal > lapLeft * 1.2)
+                        if (fuelLapsRemainingDecimal > lapLeft * 1.4f && vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
+                        {
+                            mode = Fuel.EngineMode.Overtake; //If we have super overtake, overtake can be used as a fuel saving mode
+                        }
+                        else if (fuelLapsRemainingDecimal > lapLeft * 1.2)
                         {
                             mode = Fuel.EngineMode.High;
 
@@ -665,12 +686,9 @@ namespace Assistant
                             mode = Fuel.EngineMode.Low;
                         }
                     }
-
                 }
 
-
             }
-
 
             if (vehicle.car.seriesCurrentParts[1].partCondition.IsOnRed() && mode < Fuel.EngineMode.Medium)
             {
