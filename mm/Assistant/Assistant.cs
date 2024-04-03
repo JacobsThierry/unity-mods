@@ -629,13 +629,13 @@ namespace Assistant
 
 
                 //If we don't have enough fuel, save it. If we have too much fuel, use it
-                if (fuelLapsRemainingDecimal < lapLeft * 0.9f)
-                {
-                    mode = Fuel.EngineMode.Medium;
-                }
-                else if (fuelLapsRemainingDecimal < lapLeft * 0.85f)
+                if (fuelLapsRemainingDecimal < lapLeft * 0.85f)
                 {
                     mode = Fuel.EngineMode.Low;
+                }
+                else if (fuelLapsRemainingDecimal < lapLeft * 0.9f)
+                {
+                    mode = Fuel.EngineMode.Medium;
                 }
                 else if (fuelLapsRemainingDecimal > lapLeft * 1.45f && vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
                 {
