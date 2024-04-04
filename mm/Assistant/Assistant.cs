@@ -511,7 +511,7 @@ namespace Assistant
             //In game, the ERS should be set to "Auto" and not "manual". I guess the UI take the control if it's set to manual.
             vehicle.ERSController.autoControlERS = false;
 
-            if (vehicle.ERSController.normalizedCharge < 0.35)
+            if (vehicle.ERSController.normalizedCharge < 0.20)
             {
                 return;
             }
@@ -521,63 +521,15 @@ namespace Assistant
 
             if (hybrideEnabled)
             {
-                //* 1.25 so that we use the laps remaining if using the low engine mode
-                float fuelLapsRemainingDecimal = vehicle.performance.fuel.GetFuelLapsRemainingDecimal() * 1.25f;
-                float targetFuelLapDelta = vehicle.performance.fuel.GetTargetFuelLapDelta();
+                float lapLeft = getLapLeft(options, vehicle);
 
-                if (vehicle.championship.rules.isRefuelingOn)
+                if(lapLeft * 0.9 > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
                 {
-                    if (options.plannedPitstop)
-                    {
-                        int lap = vehicle.timer.lap;
-                        float num = vehicle.pathController.distanceAlongTrackPath01;
-                        if (num == 1f)
-                        {
-                            num = 0f;
-                        }
-                        float num2 = fuelLapsRemainingDecimal - (options.pitstopOnLap - (float)lap - num);
-
-                        if (num2 < 0)
-                        {
-                            if (vehicle.ERSController.GetNormalizedCooldown(ERSController.Mode.Hybrid) == 0 && vehicle.ERSController.mode == ERSController.Mode.Harvest)
-                            {
-                                vehicle.ERSController.SetERSMode(ERSController.Mode.Hybrid);
-                            }
-                            return;
-                        }
-                    }
-                    else
-                    {
-
-                        float lapsRemainingDecimal = vehicle.GetLapsRemainingDecimal();
-                        float fuelNeeded = lapsRemainingDecimal + options.fuel;
-
-                        if (fuelLapsRemainingDecimal < fuelNeeded)
-                        {
-                            if (vehicle.ERSController.GetNormalizedCooldown(ERSController.Mode.Hybrid) == 0 && vehicle.ERSController.mode == ERSController.Mode.Harvest)
-                            {
-                                vehicle.ERSController.SetERSMode(ERSController.Mode.Hybrid);
-                            }
-                            return;
-                        }
-                    }
-
+                    vehicle.ERSController.SetERSMode(ERSController.Mode.Hybrid);
                 }
-                else
-                {
-                    if (targetFuelLapDelta < (options.fuel - 0.2f))
-                    {
-                        if (vehicle.ERSController.GetNormalizedCooldown(ERSController.Mode.Hybrid) == 0 && vehicle.ERSController.mode == ERSController.Mode.Harvest)
-                        {
-                            vehicle.ERSController.SetERSMode(ERSController.Mode.Hybrid);
-                        }
-                        return;
-                    }
-                }
+
             }
-
-
-
+            
             if (powerEnabled)
             {
                 if (Game.instance.sessionManager.isSafetyCarFlag)
@@ -613,8 +565,8 @@ namespace Assistant
                             vehicle.ERSController.SetERSMode(ERSController.Mode.Power);
                         }
 
-                        //If power < 0.5 we go back to harvest mode in case we need the power to close a gap
-                        if (vehicle.ERSController.mode == ERSController.Mode.Power && vehicle.ERSController.normalizedCharge < 0.5 && vehicle.ERSController.GetNormalizedCooldown(ERSController.Mode.Harvest) == 0)
+                        //If power < 0.8 we go back to harvest mode in case we need the power to close a gap
+                        if (vehicle.ERSController.mode == ERSController.Mode.Power && vehicle.ERSController.normalizedCharge < 0.8 && vehicle.ERSController.GetNormalizedCooldown(ERSController.Mode.Harvest) == 0)
                         {
                             vehicle.ERSController.SetERSMode(ERSController.Mode.Harvest);
                         }
