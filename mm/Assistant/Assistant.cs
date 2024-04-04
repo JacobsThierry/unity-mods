@@ -642,7 +642,7 @@ namespace Assistant
                 lapLeft = diff - num;
                 if (lapLeft < 0)
                 {
-                    lapLeft = 1;
+                    lapLeft = 1 - num;
                 }
             }
             else
