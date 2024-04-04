@@ -77,7 +77,7 @@ namespace Assistant
 
                         List<int> l = new List<int>();
 
-                        for (int i = 1; i < pitPerRace; i++)
+                        for (int i = 1; i <= pitPerRace; i++)
                         {
                             int temp = session.lap + lapPerPit * i;
                             if (i == 1)
