@@ -25,10 +25,13 @@ namespace Assistant
         [Draw("Smart engine usage", VisibleOn = "engine|True")] public bool smartEngine = false;
 
         [Draw("Planned pitstop", VisibleOn = "engine|True")] public bool plannedPitstop = false;
+
         [Draw("Auto set pitstops", VisibleOn = "#OnlapVisible|True")] public bool autoPitstop;
+        [Draw("Stint length multiplier", DrawType.Slider, Min = 0.5, Max = 1.5, Precision = 2, VisibleOn = "#StintLengthVisible|True")] public float stintLength = 1f;
+
 
         [Draw("Hold fuel lap delta", DrawType.Slider, Min = -1, Max = 1, Precision = 2, VisibleOn = "#HoldfuelVisible|True")] public float fuel = 0f;
-        [Draw("On lap", DrawType.Field, Min = 1, Max = 1000, Precision = 0, VisibleOn = "#OnlapVisible|True")] public float pitstopOnLap = 100f;
+        [Draw("On lap", DrawType.Field, Min = 1, Max = 1000, Precision = 0, VisibleOn = "#StintLengthVisible|True")] public float pitstopOnLap = 100f;
         [Draw("Next pitstops", DrawType.Field, Min = 1.0, Precision = 0, VisibleOn = "#OnlapVisible|True")]
         public int[] nextPitstops = { };
 
@@ -36,25 +39,25 @@ namespace Assistant
         bool OnlapVisible => engine && plannedPitstop;
         bool HoldfuelVisible => engine && !plannedPitstop;
         bool TyreTemperatureVisible => driving && !autoTyre;
-
+        bool StintLengthVisible => autoPitstop && OnlapVisible;
 
         public void OnChange()
         {
             if (autoPitstop)
             {
-                autoPitstop = false;
                 int lapLeft;
+                autoPitstop = false;
                 if (Game.instance.sessionManager.eventDetails.currentSession.sessionType == SessionDetails.SessionType.Race)
                 {
                     SessionManager session = Game.instance.sessionManager;
 
                     if (Main.IsEnduranceSeries(session.championship.series))
                     {
-                        lapLeft = Mathf.FloorToInt(1f - session.GetNormalizedSessionTime() * Game.instance.sessionManager.duration / session.estimatedLapTime);
+                        lapLeft = Mathf.FloorToInt((1f - session.GetNormalizedSessionTime() * Game.instance.sessionManager.duration / session.estimatedLapTime) * stintLength);
                     }
                     else
                     {
-                        lapLeft = session.lapCount - session.lap ;
+                        lapLeft = session.lapCount - session.lap;
                     }
 
                     //I hope this is right ??
@@ -70,7 +73,7 @@ namespace Assistant
 
                         List<int> l = new List<int>();
                         int temp = 0;
-                        for (int i = 0; i < pitPerRace-1; i++)
+                        for (int i = 0; i < pitPerRace - 1; i++)
                         {
                             temp += lapPerPit;
                             if (i == 0)
@@ -88,6 +91,7 @@ namespace Assistant
                     }
                 }
             }
+
         }
 
     }
