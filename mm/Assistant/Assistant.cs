@@ -73,15 +73,14 @@ namespace Assistant
                     {
                         int pitPerRace = Mathf.RoundToInt(lapLeft / (maxFuel * stintLength));
 
-                        int lapPerPit = Mathf.RoundToInt(lapLeft / pitPerRace);
 
 
                         List<int> l = new List<int>();
 
                         for (int i = 1; i <= pitPerRace; i++)
                         {
-                            int temp = session.lap + lapPerPit * i;
-                            if (temp >= session.lapCount) break;
+                            int temp = session.lap + Mathf.RoundToInt(lapLeft * i / (pitPerRace + 1));
+
                             if (i == 1)
                             {
                                 pitstopOnLap = temp;
