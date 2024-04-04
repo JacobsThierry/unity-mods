@@ -363,6 +363,7 @@ namespace Assistant
                         t = 0.25f;
                     }
 
+
                     if (vehicle.timer.currentSector == Game.instance.sessionManager.yellowFlagSector && Game.instance.sessionManager.flag == SessionManager.Flag.Yellow)
                     {
                         t = 0.05f;
@@ -398,6 +399,66 @@ namespace Assistant
             if (vehicle.timer.lap == 0 && options.boostDrive)
             {
                 mode = DrivingStyle.Mode.Attack;
+            }
+
+
+            if (options.smartEngine)
+            {
+                //Do not ruine the tyre if we're not fighting for a position
+                if (Assistant.getMinGap(vehicle) < 0.6f && mode == DrivingStyle.Mode.Attack)
+                {
+                    mode = GetDecreaseDrivingStyle(mode);
+                }
+                else
+                {
+
+                    //Do not eat the tyre if would make us pit too early
+                    if(mode == DrivingStyle.Mode.Attack)
+                    {
+                        SessionTimer.PitstopData lastPit = vehicle.timer.currentPitstop;
+                        int lastPitLap;
+                        if (lastPit == null)
+                        {
+                            lastPitLap = 0;
+                        }
+                        else
+                        {
+                            lastPitLap = lastPit.lapNumber;
+                        }
+
+                        float num = vehicle.pathController.distanceAlongTrackPath01;
+                        if (num == 1f)
+                        {
+                            num = 0f;
+                        }
+
+
+
+                        float lapLeft = getLapLeft(options, vehicle);
+
+                        float nextPitLap = lapLeft + vehicle.timer.lap;
+                        float relayLength = nextPitLap - lastPitLap;
+                        float lapsInRelay = vehicle.timer.lap + vehicle.pathController.distanceAlongTrackPath01 - lastPitLap;
+
+                        float relayPercent = 1;
+                        if (relayLength > 0)
+                        {
+                            relayPercent = lapsInRelay / relayLength;
+
+                            float tyreWear = tyre.GetCondition();
+
+                            if (relayPercent > 0.4 && (1 - relayPercent + 0.15) < tyreWear)
+                            {
+                                mode = GetDecreaseDrivingStyle(mode);
+                            }
+                        }
+                        
+
+                    }
+
+                    
+                    
+                }
             }
 
             vehicle.performance.drivingStyle.SetDrivingStyle(mode);
@@ -563,15 +624,8 @@ namespace Assistant
             }
         }
 
-        internal static void AssistEngine(DriverAssistOptions options, RacingVehicle vehicle)
+        internal static float getLapLeft(DriverAssistOptions options, RacingVehicle vehicle)
         {
-            if (!options.engine || Game.instance.sessionManager.eventDetails.currentSession.sessionType != SessionDetails.SessionType.Race) return;
-
-            var mode = Fuel.EngineMode.Medium;
-
-            float fuelLapsRemainingDecimal = vehicle.performance.fuel.GetFuelLapsRemainingDecimal();
-            float fuelLapDelta = vehicle.performance.fuel.GetTargetFuelLapDelta();
-
             float lapLeft = GetLapsRemainingDecimal(vehicle);
 
             if (options.plannedPitstop && vehicle.championship.rules.isRefuelingOn)
@@ -595,6 +649,19 @@ namespace Assistant
             {
                 lapLeft = lapLeft + options.fuel;
             }
+            return lapLeft;
+        }
+
+        internal static void AssistEngine(DriverAssistOptions options, RacingVehicle vehicle)
+        {
+            if (!options.engine || Game.instance.sessionManager.eventDetails.currentSession.sessionType != SessionDetails.SessionType.Race) return;
+
+            var mode = Fuel.EngineMode.Medium;
+
+            float fuelLapsRemainingDecimal = vehicle.performance.fuel.GetFuelLapsRemainingDecimal();
+            float fuelLapDelta = vehicle.performance.fuel.GetTargetFuelLapDelta();
+
+            float lapLeft = getLapLeft(options, vehicle);
 
 
 
