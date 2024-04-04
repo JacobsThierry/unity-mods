@@ -28,10 +28,12 @@ namespace Assistant
 
         [Draw("Auto set pitstops", VisibleOn = "#OnlapVisible|True")] public bool autoPitstop;
         [Draw("Stint length multiplier", DrawType.Slider, Min = 0.5, Max = 1.5, Precision = 2, VisibleOn = "#StintLengthVisible|True")] public float stintLength = 1f;
-
+        [Draw("Set", VisibleOn = "#StintLengthVisible|True")] public bool setPitstop;
 
         [Draw("Hold fuel lap delta", DrawType.Slider, Min = -1, Max = 1, Precision = 2, VisibleOn = "#HoldfuelVisible|True")] public float fuel = 0f;
         [Draw("On lap", DrawType.Field, Min = 1, Max = 1000, Precision = 0, VisibleOn = "#StintLengthVisible|True")] public float pitstopOnLap = 100f;
+        
+
         [Draw("Next pitstops", DrawType.Field, Min = 1.0, Precision = 0, VisibleOn = "#OnlapVisible|True")]
         public int[] nextPitstops = { };
 
@@ -43,22 +45,25 @@ namespace Assistant
 
         public void OnChange()
         {
-            if (autoPitstop)
+            if (setPitstop)
             {
                 int lapLeft;
-                autoPitstop = false;
+                setPitstop = false;
                 if (Game.instance.sessionManager.eventDetails.currentSession.sessionType == SessionDetails.SessionType.Race)
                 {
                     SessionManager session = Game.instance.sessionManager;
+                    
 
                     if (Main.IsEnduranceSeries(session.championship.series))
                     {
-                        lapLeft = Mathf.FloorToInt((1f - session.GetNormalizedSessionTime() * Game.instance.sessionManager.duration / session.estimatedLapTime) * stintLength);
+                        lapLeft = Mathf.FloorToInt((1f - session.GetNormalizedSessionTime() * Game.instance.sessionManager.duration / session.estimatedLapTime));
                     }
                     else
                     {
                         lapLeft = session.lapCount - session.lap;
+                        
                     }
+                    lapLeft = Mathf.FloorToInt(lapLeft / stintLength);
 
                     //I hope this is right ??
                     float maxFuel = Mathf.Ceil(session.championship.rules.fuelLimitForRaceDistanceNormalized * session.lapCount);
@@ -72,11 +77,11 @@ namespace Assistant
                         Main.logger.Log(lapPerPit.ToString());
 
                         List<int> l = new List<int>();
-                        int temp = 0;
-                        for (int i = 0; i < pitPerRace - 1; i++)
+
+                        for (int i = 1; i < pitPerRace; i++)
                         {
-                            temp += lapPerPit;
-                            if (i == 0)
+                            int temp = session.lap + lapPerPit * i;
+                            if (i == 1)
                             {
                                 pitstopOnLap = temp;
                             }
