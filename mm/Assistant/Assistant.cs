@@ -405,7 +405,7 @@ namespace Assistant
             if (options.smartEngine)
             {
                 //Do not ruine the tyre if we're not fighting for a position
-                if (Assistant.getMinGap(vehicle) < 0.6f && mode == DrivingStyle.Mode.Attack)
+                if (Assistant.getMinGap(vehicle) > 0.6f && mode == DrivingStyle.Mode.Attack)
                 {
                     mode = GetDecreaseDrivingStyle(mode);
                 }
@@ -446,10 +446,11 @@ namespace Assistant
                             relayPercent = lapsInRelay / relayLength;
 
                             float tyreWear = tyre.GetCondition();
+                            Main.logger.Log("Relay = " + relayPercent.ToString() + " wear = " + tyreWear.ToString());
 
-                            if (relayPercent > 0.4 && (1 - relayPercent + 0.15) < tyreWear)
+                            if (relayPercent > 0.3 && (1 - relayPercent + 0.1) > tyreWear)
                             {
-                                mode = GetDecreaseDrivingStyle(mode);
+                                mode = DrivingStyle.Mode.Push;
                             }
                         }
                         
