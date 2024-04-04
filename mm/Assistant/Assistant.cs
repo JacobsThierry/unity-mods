@@ -31,7 +31,7 @@ namespace Assistant
         [Draw("Set", VisibleOn = "#StintLengthVisible|True")] public bool setPitstop;
 
         [Draw("Hold fuel lap delta", DrawType.Slider, Min = -1, Max = 1, Precision = 2, VisibleOn = "#HoldfuelVisible|True")] public float fuel = 0f;
-        [Draw("On lap", DrawType.Field, Min = 1, Max = 1000, Precision = 0, VisibleOn = "#StintLengthVisible|True")] public float pitstopOnLap = 100f;
+        [Draw("On lap", DrawType.Field, Min = 1, Max = 1000, Precision = 0, VisibleOn = "plannedPitstop|True")] public float pitstopOnLap = 100f;
         
 
         [Draw("Next pitstops", DrawType.Field, Min = 1.0, Precision = 0, VisibleOn = "#OnlapVisible|True")]
