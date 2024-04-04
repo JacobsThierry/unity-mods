@@ -63,18 +63,17 @@ namespace Assistant
                         lapLeft = session.lapCount - session.lap;
                         
                     }
-                    lapLeft = Mathf.FloorToInt(lapLeft / stintLength);
+                    lapLeft = Mathf.FloorToInt(lapLeft);
 
                     //I hope this is right ??
                     float maxFuel = Mathf.Ceil(session.championship.rules.fuelLimitForRaceDistanceNormalized * session.lapCount);
 
                     if (maxFuel != 0 && lapLeft != 0)
                     {
-                        int pitPerRace = Mathf.CeilToInt(lapLeft / maxFuel);
+                        int pitPerRace = Mathf.CeilToInt(lapLeft / (maxFuel * stintLength));
 
-                        int lapPerPit = Mathf.FloorToInt(lapLeft / pitPerRace);
+                        int lapPerPit = Mathf.FloorToInt(stintLength * lapLeft / pitPerRace);
 
-                        Main.logger.Log(lapPerPit.ToString());
 
                         List<int> l = new List<int>();
 
