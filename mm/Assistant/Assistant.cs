@@ -24,8 +24,9 @@ namespace Assistant
         [Draw("Max on the 1st lap", VisibleOn = "engine|True")] public bool boostEngine = false;
         [Draw("Smart engine usage", VisibleOn = "engine|True")] public bool smartEngine = false;
 
-        [Draw("Planned pitstop", VisibleOn = "engine|True")] public bool plannedPitstop = false;
 
+        [Header("Pitstop")]
+        [Draw("Planned pitstop", VisibleOn = "engine|True")] public bool plannedPitstop = false;
         [Draw("Auto set pitstops", VisibleOn = "#OnlapVisible|True")] public bool autoPitstop;
         [Draw("Stint length multiplier", DrawType.Slider, Min = 0.5, Max = 1.5, Precision = 2, VisibleOn = "#StintLengthVisible|True")] public float stintLength = 1f;
         [Draw("Set", VisibleOn = "#StintLengthVisible|True")] public bool setPitstop;
@@ -70,16 +71,17 @@ namespace Assistant
 
                     if (maxFuel != 0 && lapLeft != 0)
                     {
-                        int pitPerRace = Mathf.CeilToInt(lapLeft / (maxFuel * stintLength));
+                        float pitPerRace = lapLeft / (maxFuel * stintLength);
 
-                        int lapPerPit = Mathf.FloorToInt(stintLength * lapLeft / pitPerRace);
+                        int lapPerPit = Mathf.FloorToInt(lapLeft / pitPerRace);
 
 
                         List<int> l = new List<int>();
 
-                        for (int i = 1; i <= pitPerRace; i++)
+                        for (int i = 1; i <= Mathf.FloorToInt(pitPerRace); i++)
                         {
                             int temp = session.lap + lapPerPit * i;
+                            if (temp >= session.lapCount) break;
                             if (i == 1)
                             {
                                 pitstopOnLap = temp;
@@ -512,9 +514,8 @@ namespace Assistant
                             relayPercent = lapsInRelay / relayLength;
 
                             float tyreWear = tyre.GetCondition();
-                            Main.logger.Log("Relay = " + relayPercent.ToString() + " wear = " + tyreWear.ToString());
 
-                            if (relayPercent > 0.3 && (1 - relayPercent + 0.1) > tyreWear)
+                            if (relayPercent > 0.15 && (1 - relayPercent + 0.1) > tyreWear)
                             {
                                 mode = DrivingStyle.Mode.Push;
                             }
@@ -592,6 +593,7 @@ namespace Assistant
                 if (lapLeft * 0.9 > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
                 {
                     vehicle.ERSController.SetERSMode(ERSController.Mode.Hybrid);
+                    return;
                 }
 
             }
