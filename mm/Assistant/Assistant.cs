@@ -28,7 +28,7 @@ namespace Assistant
         [Header("Pitstop")]
         [Draw("Planned pitstop", VisibleOn = "engine|True")] public bool plannedPitstop = false;
         [Draw("Auto set pitstops", VisibleOn = "#OnlapVisible|True")] public bool autoPitstop;
-        [Draw("Stint length multiplier", DrawType.Slider, Min = 0.5, Max = 1.5, Precision = 1, VisibleOn = "#StintLengthVisible|True")] public float stintLength = 1f;
+        [Draw("Stint length multiplier", DrawType.Slider, Min = 0.5, Max = 1.5, Precision = 2, VisibleOn = "#StintLengthVisible|True")] public float stintLength = 1f;
         [Draw("Set", VisibleOn = "#StintLengthVisible|True")] public bool setPitstop;
 
         [Draw("Hold fuel lap delta", DrawType.Slider, Min = -1, Max = 1, Precision = 2, VisibleOn = "#HoldfuelVisible|True")] public float fuel = 0f;
@@ -58,23 +58,22 @@ namespace Assistant
 
                     if (Main.IsEnduranceSeries(session.championship.series))
                     {
-                        lapLeft = Mathf.FloorToInt((1f - session.GetNormalizedSessionTime() * Game.instance.sessionManager.duration / session.estimatedLapTime));
+                        lapLeft = Mathf.RoundToInt((1f - session.GetNormalizedSessionTime() * Game.instance.sessionManager.duration / session.estimatedLapTime));
                     }
                     else
                     {
                         lapLeft = session.lapCount - session.lap;
 
                     }
-                    lapLeft = Mathf.FloorToInt(lapLeft);
 
                     //I hope this is right ??
                     float maxFuel = Mathf.Ceil(session.championship.rules.fuelLimitForRaceDistanceNormalized * session.lapCount);
 
-                    if (maxFuel != 0 && lapLeft != 0)
+                    if (maxFuel != 0 && lapLeft != 0 && stintLength != 0)
                     {
-                        int pitPerRace = Mathf.FloorToInt(lapLeft / (maxFuel * stintLength));
+                        int pitPerRace = Mathf.RoundToInt(lapLeft / (maxFuel * stintLength));
 
-                        int lapPerPit = Mathf.FloorToInt(lapLeft / pitPerRace);
+                        int lapPerPit = Mathf.RoundToInt(lapLeft / pitPerRace);
 
 
                         List<int> l = new List<int>();
