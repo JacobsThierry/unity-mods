@@ -25,15 +25,71 @@ namespace Assistant
         [Draw("Smart engine usage", VisibleOn = "engine|True")] public bool smartEngine = false;
 
         [Draw("Planned pitstop", VisibleOn = "engine|True")] public bool plannedPitstop = false;
+        [Draw("Auto set pitstops", VisibleOn = "#OnlapVisible|True")] public bool autoPitstop;
+
         [Draw("Hold fuel lap delta", DrawType.Slider, Min = -1, Max = 1, Precision = 2, VisibleOn = "#HoldfuelVisible|True")] public float fuel = 0f;
         [Draw("On lap", DrawType.Field, Min = 1, Max = 1000, Precision = 0, VisibleOn = "#OnlapVisible|True")] public float pitstopOnLap = 100f;
         [Draw("Next pitstops", DrawType.Field, Min = 1.0, Precision = 0, VisibleOn = "#OnlapVisible|True")]
-        public float[] nextPitstops = { };
+        public int[] nextPitstops = { };
 
         [Draw("Assist ERS")] public bool ers = false;
         bool OnlapVisible => engine && plannedPitstop;
         bool HoldfuelVisible => engine && !plannedPitstop;
         bool TyreTemperatureVisible => driving && !autoTyre;
+
+
+        public void OnChange()
+        {
+            if (autoPitstop)
+            {
+                autoPitstop = false;
+                int lapLeft;
+                if (Game.instance.sessionManager.eventDetails.currentSession.sessionType == SessionDetails.SessionType.Race)
+                {
+                    SessionManager session = Game.instance.sessionManager;
+
+                    if (Main.IsEnduranceSeries(session.championship.series))
+                    {
+                        lapLeft = Mathf.FloorToInt(1f - session.GetNormalizedSessionTime() * Game.instance.sessionManager.duration / session.estimatedLapTime);
+                    }
+                    else
+                    {
+                        lapLeft = session.lapCount - session.lap ;
+                    }
+
+                    //I hope this is right ??
+                    float maxFuel = Mathf.Ceil(session.championship.rules.fuelLimitForRaceDistanceNormalized * session.lapCount);
+
+                    if (maxFuel != 0 && lapLeft != 0)
+                    {
+                        int pitPerRace = Mathf.CeilToInt(lapLeft / maxFuel);
+
+                        int lapPerPit = Mathf.FloorToInt(lapLeft / pitPerRace);
+
+                        Main.logger.Log(lapPerPit.ToString());
+
+                        List<int> l = new List<int>();
+                        int temp = 0;
+                        for (int i = 0; i < pitPerRace-1; i++)
+                        {
+                            temp += lapPerPit;
+                            if (i == 0)
+                            {
+                                pitstopOnLap = temp;
+                            }
+                            else
+                            {
+                                l.Add(temp);
+                            }
+                        }
+
+                        nextPitstops = l.ToArray();
+
+                    }
+                }
+            }
+        }
+
     }
 
     public class ManagementAssistOptions
@@ -79,6 +135,8 @@ namespace Assistant
 
         public void OnChange()
         {
+            driver1AssistOptions.OnChange();
+            driver2AssistOptions.OnChange();
         }
     }
 
@@ -413,7 +471,7 @@ namespace Assistant
                 {
 
                     //Do not eat the tyre if would make us pit too early
-                    if(mode == DrivingStyle.Mode.Attack)
+                    if (mode == DrivingStyle.Mode.Attack)
                     {
                         SessionTimer.PitstopData lastPit = vehicle.timer.currentPitstop;
                         int lastPitLap;
@@ -453,12 +511,12 @@ namespace Assistant
                                 mode = DrivingStyle.Mode.Push;
                             }
                         }
-                        
+
 
                     }
 
-                    
-                    
+
+
                 }
             }
 
@@ -523,22 +581,24 @@ namespace Assistant
             {
                 float lapLeft = getLapLeft(options, vehicle);
 
-                if(lapLeft * 0.9 > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
+                if (lapLeft * 0.9 > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
                 {
                     vehicle.ERSController.SetERSMode(ERSController.Mode.Hybrid);
                 }
 
             }
-            
+
             if (powerEnabled)
             {
                 if (Game.instance.sessionManager.isSafetyCarFlag)
                 {
+                    vehicle.ERSController.SetERSMode(ERSController.Mode.Harvest);
                     return;
                 }
 
-                if (vehicle.timer.currentSector == Game.instance.sessionManager.yellowFlagSector && Game.instance.sessionManager.flag == SessionManager.Flag.Yellow)
+                if (vehicle.timer.currentSector == Game.instance.sessionManager.yellowFlagSector && Game.instance.sessionManager.flag == SessionManager.Flag.Yellow && vehicle.ERSController.GetNormalizedCooldown(ERSController.Mode.Harvest) == 0)
                 {
+                    vehicle.ERSController.SetERSMode(ERSController.Mode.Harvest);
                     return;
                 }
 
@@ -1105,7 +1165,7 @@ namespace Assistant
 
                 if (vehicle.carID == 0 && Main.settings.driver1AssistOptions.engine && Main.settings.driver1AssistOptions.plannedPitstop)
                 {
-                    var pitQueue = new Queue<float>(Main.settings.driver1AssistOptions.nextPitstops);
+                    var pitQueue = new Queue<int>(Main.settings.driver1AssistOptions.nextPitstops);
                     if (pitQueue.Count == 0)
                     {
                         Main.settings.driver1AssistOptions.plannedPitstop = false;
@@ -1119,7 +1179,7 @@ namespace Assistant
                 }
                 if (vehicle.carID == 1 && Main.settings.driver2AssistOptions.engine && Main.settings.driver2AssistOptions.plannedPitstop)
                 {
-                    var pitQueue = new Queue<float>(Main.settings.driver2AssistOptions.nextPitstops);
+                    var pitQueue = new Queue<int>(Main.settings.driver2AssistOptions.nextPitstops);
                     if (pitQueue.Count == 0)
                     {
                         Main.settings.driver2AssistOptions.plannedPitstop = false;
