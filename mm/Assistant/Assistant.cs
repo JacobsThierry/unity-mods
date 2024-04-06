@@ -33,12 +33,15 @@ namespace Assistant
 
         [Draw("Hold fuel lap delta", DrawType.Slider, Min = -1, Max = 1, Precision = 2, VisibleOn = "#HoldfuelVisible|True")] public float fuel = 0f;
         [Draw("On lap", DrawType.Field, Min = 1, Max = 1000, Precision = 0, VisibleOn = "plannedPitstop|True")] public float pitstopOnLap = 100f;
-        
+
 
         [Draw("Next pitstops", DrawType.Field, Min = 1.0, Precision = 0, VisibleOn = "#OnlapVisible|True")]
         public int[] nextPitstops = { };
 
+        [Header("ERS options")]
         [Draw("Assist ERS")] public bool ers = false;
+        [Draw("Do not spend excess power on hybride", VisibleOn = "ers|True")] public bool doNotSpendExcessOnHybride = false;
+
         bool OnlapVisible => engine && plannedPitstop;
         bool HoldfuelVisible => engine && !plannedPitstop;
         bool TyreTemperatureVisible => driving && !autoTyre;
@@ -67,7 +70,7 @@ namespace Assistant
                     }
 
                     //I hope this is right ??
-                    float maxFuel = Mathf.Ceil(session.championship.rules.fuelLimitForRaceDistanceNormalized * session.lapCount);
+                    float maxFuel = Mathf.RoundToInt(session.championship.rules.fuelLimitForRaceDistanceNormalized * session.lapCount);
 
                     if (maxFuel != 0 && lapLeft != 0 && stintLength != 0)
                     {
@@ -329,20 +332,11 @@ namespace Assistant
 
     static class Assistant
     {
-        internal class TyreLog
-        {
-            public TyreSet tyre;
-            public float temp;
-            public DateTime time;
-        }
-
 
         internal static float getMinGap(RacingVehicle vehicle)
         {
-
             int teamID = vehicle.driver.contract.GetTeam().teamID;
             float gapAhead = vehicle.timer.gapToAhead;
-
 
             //Prevent fighting teammate
             if (vehicle.standingsPosition != 1 && vehicle.ahead.driver.contract.GetTeam().teamID == teamID)
@@ -386,6 +380,17 @@ namespace Assistant
         }
 
 
+        internal class TyreLog
+        {
+            public TyreSet tyre;
+            public float temp;
+            public DateTime time;
+        }
+
+
+
+
+
         internal static readonly TyreLog tyre1 = new TyreLog();
         internal static readonly TyreLog tyre2 = new TyreLog();
 
@@ -395,6 +400,12 @@ namespace Assistant
 
             if ((Game.instance.time.now - tyreLog.time).TotalSeconds < 20)
                 return;
+
+            if (Game.instance.sessionManager.isSafetyCarFlag)
+            {
+                vehicle.performance.drivingStyle.SetDrivingStyle(DrivingStyle.Mode.BackUp);
+                return;
+            }
 
             var mode = vehicle.performance.drivingStyleMode;
             var tyre = vehicle.setup.tyreSet;
@@ -447,6 +458,10 @@ namespace Assistant
             if (temp < t + 0.04f && temp > t - 0.04f && tempChangeRate > -changeRate && tempChangeRate < changeRate)
             {
             }
+            else if (temp < t - 0.4f)
+            {
+                mode = GetIncreaseDrivingStyle(GetIncreaseDrivingStyle(GetIncreaseDrivingStyle(mode)));
+            }
             else if (temp < t - 0.2f)
             {
                 if (tempChangeRate < changeRate2)
@@ -474,12 +489,16 @@ namespace Assistant
             }
 
 
-            if (options.smartEngine)
+            if (options.autoTyre)
             {
                 //Do not ruine the tyre if we're not fighting for a position
                 if (Assistant.getMinGap(vehicle) > 0.6f && mode == DrivingStyle.Mode.Attack)
                 {
                     mode = GetDecreaseDrivingStyle(mode);
+                }
+                else if (Assistant.getMinGap(vehicle) > 0.6f && mode == DrivingStyle.Mode.BackUp)
+                {
+                    mode = GetIncreaseDrivingStyle(mode);
                 }
                 else
                 {
@@ -519,7 +538,7 @@ namespace Assistant
 
                             float tyreWear = tyre.GetCondition();
 
-                            if (relayPercent > 0.15 && (1 - relayPercent + 0.1) > tyreWear)
+                            if (relayPercent > 0.2 && (1 - relayPercent + 0.2) > tyreWear)
                             {
                                 mode = DrivingStyle.Mode.Push;
                             }
@@ -562,6 +581,65 @@ namespace Assistant
         }
 
 
+        internal class RadioMessagePlannedPit : RadioMessage
+        {
+
+            public RadioMessagePlannedPit(RacingVehicle inVehicle, TeamRadio inTeamRadio) : base(inVehicle, inTeamRadio)
+            {
+                text = new TextDynamicData();
+                //This is awfull
+                text.textID = "We planned to pit this lap !";
+
+            }
+
+            public override void OnLoad()
+            {
+            }
+            public override bool DontDelayForDriverFeedback()
+            {
+                return true;
+            }
+
+            private bool IsVehicleReadyToDisplayMessage()
+            {
+                return mVehicle.pathController.currentPathType == PathController.PathType.Track && !mVehicle.strategy.IsGoingToPit() && !mVehicle.timer.hasSeenChequeredFlag && base.isRaceSession && !mVehicle.behaviourManager.isOutOfRace;
+            }
+
+            protected override void OnSimulationUpdate() { }
+
+            protected void FakeSendDilemma()
+            {
+                Game.instance.sessionManager.teamRadioManager.SendDilemma(this);
+            }
+
+            public void CreateDialogQuery()
+            {
+                DialogQuery dialogQuery = new DialogQuery();
+                dialogQuery.AddCriteria("Source", (Game.instance.sessionManager.flag != SessionManager.Flag.SafetyCar) ? "VSCDilemma" : "SafetyCarDilemma");
+                AddPersonCriteria(dialogQuery, mVehicle.driver);
+                dialogRule = mQueryCreator.ProcessQueryWithOwnCriteria(dialogQuery, inDontIgnoreRules: false);
+                if (dialogRule != null)
+                {
+                    personWhoSpeaks = mVehicle.driver;
+                    FakeSendDilemma();
+                }
+            }
+        }
+
+
+        internal static void NotifyPit(DriverAssistOptions options, RacingVehicle vehicle)
+        {
+
+            if (options.plannedPitstop && options.pitstopOnLap == vehicle.timer.lap)
+            {
+                TeamRadioManager manager = Game.instance.sessionManager.teamRadioManager;
+                RadioMessagePlannedPit message = new RadioMessagePlannedPit(vehicle, vehicle.teamRadio);
+                message.CreateDialogQuery();
+            }
+
+        }
+
+
         internal static void AssistERS(DriverAssistOptions options, RacingVehicle vehicle)
         {
 
@@ -587,67 +665,80 @@ namespace Assistant
                 return;
             }
 
-            bool hybrideEnabled = vehicle.ERSController.CanChangeToSpecificMode(ERSController.Mode.Hybrid);
-            bool powerEnabled = vehicle.ERSController.CanChangeToSpecificMode(ERSController.Mode.Power);
+
+
+            bool hybrideEnabled = vehicle.championship.rules.isHybridModeActive;
+
+            bool powerEnabled = vehicle.championship.rules.isEnergySystemActive;
+
+
+
+            float lapLeft = getLapLeft(options, vehicle);
+
 
             if (hybrideEnabled)
             {
-                float lapLeft = getLapLeft(options, vehicle);
-
                 if (lapLeft * 0.9 > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
                 {
-                    vehicle.ERSController.SetERSMode(ERSController.Mode.Hybrid);
+                    SetErs(vehicle, ERSController.Mode.Hybrid);
                     return;
                 }
 
             }
 
-            if (powerEnabled)
+            if (powerEnabled && !Game.instance.sessionManager.isSafetyCarFlag)
             {
-                if (Game.instance.sessionManager.isSafetyCarFlag)
+                if (vehicle.timer.currentSector == Game.instance.sessionManager.yellowFlagSector && Game.instance.sessionManager.flag == SessionManager.Flag.Yellow)
                 {
-                    vehicle.ERSController.SetERSMode(ERSController.Mode.Harvest);
-                    return;
-                }
-
-                if (vehicle.timer.currentSector == Game.instance.sessionManager.yellowFlagSector && Game.instance.sessionManager.flag == SessionManager.Flag.Yellow && vehicle.ERSController.GetNormalizedCooldown(ERSController.Mode.Harvest) == 0)
-                {
-                    vehicle.ERSController.SetERSMode(ERSController.Mode.Harvest);
+                    SetErs(vehicle, ERSController.Mode.Harvest);
                     return;
                 }
 
 
-                if (vehicle.ERSController.GetNormalizedCooldown(ERSController.Mode.Power) == 0)
+                float minGap = Assistant.getMinGap(vehicle);
+
+                //If we're about to get overtaken or if we're stuck beheind a car we active power mode
+                // Let's say that 1% power =~ 0.01 secs
+                if (minGap < vehicle.ERSController.normalizedCharge)
                 {
-
-
-
-                    float minGap = Assistant.getMinGap(vehicle);
-
-                    //If we're about to get overtaken or if we're stuck beheind a car we active power mode
-                    // Let's say that 1% power =~ 0.01 secs
-                    if (minGap < vehicle.ERSController.normalizedCharge)
-                    {
-                        vehicle.ERSController.SetERSMode(ERSController.Mode.Power);
-                    }
-                    else
-                    {
-
-                        //If we're full on power we use it
-                        if (vehicle.ERSController.normalizedCharge > 0.90)
-                        {
-                            vehicle.ERSController.SetERSMode(ERSController.Mode.Power);
-                        }
-
-                        //If power < 0.8 we go back to harvest mode in case we need the power to close a gap
-                        if (vehicle.ERSController.mode == ERSController.Mode.Power && vehicle.ERSController.normalizedCharge < 0.8 && vehicle.ERSController.GetNormalizedCooldown(ERSController.Mode.Harvest) == 0)
-                        {
-                            vehicle.ERSController.SetERSMode(ERSController.Mode.Harvest);
-                        }
-
-                    }
+                    SetErs(vehicle, ERSController.Mode.Power);
+                    return;
                 }
 
+            }
+
+            //If we're full on power we use it
+            if (vehicle.ERSController.normalizedCharge > 0.90 && vehicle.ERSController.mode == ERSController.Mode.Harvest)
+            {
+                if (!options.doNotSpendExcessOnHybride && hybrideEnabled && lapLeft * 1.3 > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
+                {
+                    SetErs(vehicle, ERSController.Mode.Hybrid);
+                    return;
+                }
+                else if (!Game.instance.sessionManager.isSafetyCarFlag)
+                {
+                    SetErs(vehicle, ERSController.Mode.Power);
+                    return;
+                }
+            }
+            //If power < 0.85 we go back to harvest mode in case we need the power to close a gap
+            else if (vehicle.ERSController.mode != ERSController.Mode.Harvest && vehicle.ERSController.normalizedCharge < 0.85)
+            {
+                //Prevent switching to harvest mid overtake
+                if (vehicle.ERSController.mode == ERSController.Mode.Hybrid || (vehicle.ERSController.mode == ERSController.Mode.Power && Assistant.getMinGap(vehicle) > 5 * vehicle.ERSController.normalizedCharge))
+                {
+                    SetErs(vehicle, ERSController.Mode.Harvest);
+                    return;
+                }
+            }
+        }
+
+        internal static void SetErs(RacingVehicle vehicle, ERSController.Mode mode)
+        {
+            ERSController controller = vehicle.ERSController;
+            if (controller.CanChangeToSpecificMode(mode) && controller.GetNormalizedCooldown(mode) == 0 && controller.mode != mode)
+            {
+                controller.SetERSMode(mode);
             }
         }
 
@@ -681,6 +772,12 @@ namespace Assistant
 
         internal static void AssistEngine(DriverAssistOptions options, RacingVehicle vehicle)
         {
+            if (Game.instance.sessionManager.isSafetyCarFlag)
+            {
+                vehicle.performance.fuel.SetEngineMode(Fuel.EngineMode.Low);
+                return;
+            }
+
             if (!options.engine || Game.instance.sessionManager.eventDetails.currentSession.sessionType != SessionDetails.SessionType.Race) return;
 
             var mode = Fuel.EngineMode.Medium;
@@ -826,6 +923,7 @@ namespace Assistant
     {
         static void Prefix(SessionStrategy __instance, RacingVehicle ___mVehicle, int inGateID, PathData.GateType inGateType)
         {
+            
             if (!Main.enabled || inGateID % 2 != 0) return;
 
             var sessionType = Game.instance.sessionManager.eventDetails.currentSession.sessionType;
@@ -838,8 +936,9 @@ namespace Assistant
                 if (usesAI || !vehicle.isPlayerDriver)
                     return;
 
-                if (vehicle.pathState.IsInPitlaneArea() || vehicle.timer.hasSeenChequeredFlag || Game.instance.sessionManager.isSafetyCarFlag)
+                if (vehicle.pathState.IsInPitlaneArea() || vehicle.timer.hasSeenChequeredFlag)
                 {
+
                     vehicle.performance.drivingStyle.SetDrivingStyle(DrivingStyle.Mode.BackUp);
                     vehicle.performance.fuel.SetEngineMode(Fuel.EngineMode.Low);
                     return;
@@ -851,6 +950,13 @@ namespace Assistant
                     if (inGateID % 10 == 0)
                         Assistant.AssistEngine(Main.settings.driver1AssistOptions, vehicle);
                     Assistant.AssistERS(Main.settings.driver1AssistOptions, vehicle);
+
+                    //Idk if it's always working or not
+                    if(inGateID == 1)
+                    {
+                        Assistant.NotifyPit(Main.settings.driver1AssistOptions, vehicle);
+                    }
+
                 }
                 else if (vehicle.carID == 1)
                 {
@@ -858,6 +964,11 @@ namespace Assistant
                     if (inGateID % 10 == 0)
                         Assistant.AssistEngine(Main.settings.driver2AssistOptions, vehicle);
                     Assistant.AssistERS(Main.settings.driver2AssistOptions, vehicle);
+
+                    if (inGateID == 1)
+                    {
+                        Assistant.NotifyPit(Main.settings.driver2AssistOptions, vehicle);
+                    }
                 }
             }
 
