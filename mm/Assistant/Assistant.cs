@@ -32,7 +32,7 @@ namespace Assistant
         [Draw("Set", VisibleOn = "#StintLengthVisible|True")] public bool setPitstop;
 
         [Draw("Hold fuel lap delta", DrawType.Slider, Min = -1, Max = 1, Precision = 2, VisibleOn = "#HoldfuelVisible|True")] public float fuel = 0f;
-        [Draw("On lap", DrawType.Field, Min = 1, Max = 1000, Precision = 0, VisibleOn = "plannedPitstop|True")] public float pitstopOnLap = 100f;
+        [Draw("On lap", DrawType.Field, Min = 1, Max = 1000, Precision = 0, VisibleOn = "plannedPitstop|True")] public int pitstopOnLap = 100;
 
 
         [Draw("Next pitstops", DrawType.Field, Min = 1.0, Precision = 0, VisibleOn = "#OnlapVisible|True")]
@@ -525,9 +525,7 @@ namespace Assistant
 
 
 
-                        float lapLeft = getLapLeft(options, vehicle);
-
-                        float nextPitLap = lapLeft + vehicle.timer.lap;
+                        float nextPitLap = options.pitstopOnLap;
                         float relayLength = nextPitLap - lastPitLap;
                         float lapsInRelay = vehicle.timer.lap + vehicle.pathController.distanceAlongTrackPath01 - lastPitLap;
 
@@ -589,7 +587,13 @@ namespace Assistant
                 text = new TextDynamicData();
                 //This is awfull
                 text.textID = "We planned to pit this lap !";
+                
 
+            }
+
+            public override bool AllowDuplicateDilemma()
+            {
+                return true;
             }
 
             public override void OnLoad()
@@ -630,8 +634,9 @@ namespace Assistant
         internal static void NotifyPit(DriverAssistOptions options, RacingVehicle vehicle)
         {
 
-            if (options.plannedPitstop && options.pitstopOnLap == vehicle.timer.lap)
+            if (options.plannedPitstop && options.pitstopOnLap == vehicle.timer.lap + 1)
             {
+                Main.logger.Log("foo");
                 TeamRadioManager manager = Game.instance.sessionManager.teamRadioManager;
                 RadioMessagePlannedPit message = new RadioMessagePlannedPit(vehicle, vehicle.teamRadio);
                 message.CreateDialogQuery();
@@ -787,7 +792,7 @@ namespace Assistant
 
             float lapLeft = getLapLeft(options, vehicle);
 
-
+            
 
             if (!options.smartEngine)
             {
@@ -952,10 +957,11 @@ namespace Assistant
                     Assistant.AssistERS(Main.settings.driver1AssistOptions, vehicle);
 
                     //Idk if it's always working or not
-                    if(inGateID == 1)
+                    if (inGateID == 30)
                     {
                         Assistant.NotifyPit(Main.settings.driver1AssistOptions, vehicle);
                     }
+                    
 
                 }
                 else if (vehicle.carID == 1)
@@ -965,7 +971,7 @@ namespace Assistant
                         Assistant.AssistEngine(Main.settings.driver2AssistOptions, vehicle);
                     Assistant.AssistERS(Main.settings.driver2AssistOptions, vehicle);
 
-                    if (inGateID == 1)
+                    if (inGateID == 30)
                     {
                         Assistant.NotifyPit(Main.settings.driver2AssistOptions, vehicle);
                     }
@@ -1262,29 +1268,9 @@ namespace Assistant
         static void Postfix(SessionStrategy __instance, RacingVehicle ___mVehicle)
         {
             var vehicle = ___mVehicle;
-            if (Main.enabled && vehicle.isPlayerDriver && !Main.settings.aiControl && vehicle.championship.rules.isRefuelingOn
+            if (Main.enabled && vehicle.isPlayerDriver && !Main.settings.aiControl
                 && !Game.instance.sessionManager.IsSessionEnding() && Game.instance.sessionManager.sessionType == SessionDetails.SessionType.Race)
             {
-                /*var value = 0f;
-                if (Main.IsEnduranceSeries(vehicle.championship.series))
-                {
-                    value = Mathf.RoundToInt(vehicle.timer.lap + vehicle.pathController.distanceAlongTrackPath01 + vehicle.performance.fuel.GetFuelLapsRemainingDecimal());
-                }
-                else
-                {
-                    value = Mathf.RoundToInt(Game.instance.sessionManager.lapCount * vehicle.pathController.GetRaceDistanceTraveled01() + vehicle.performance.fuel.GetFuelLapsRemainingDecimal());
-                }
-
-                value = Mathf.Min(value, vehicle.GetLapsRemaining());
-
-                if (vehicle.carID == 0 && Main.settings.driver1AssistOptions.engine && Main.settings.driver1AssistOptions.plannedPitstop)
-                {
-                    Main.settings.driver1AssistOptions.pitstopOnLap = value;
-                }
-                if (vehicle.carID == 1 && Main.settings.driver2AssistOptions.engine && Main.settings.driver2AssistOptions.plannedPitstop)
-                {
-                    Main.settings.driver2AssistOptions.pitstopOnLap = value;
-                }*/
 
 
 
@@ -1294,7 +1280,7 @@ namespace Assistant
                     if (pitQueue.Count == 0)
                     {
                         Main.settings.driver1AssistOptions.plannedPitstop = false;
-                        Main.settings.driver1AssistOptions.pitstopOnLap = 0f;
+                        Main.settings.driver1AssistOptions.pitstopOnLap = 0;
                     }
                     else
                     {
@@ -1308,7 +1294,7 @@ namespace Assistant
                     if (pitQueue.Count == 0)
                     {
                         Main.settings.driver2AssistOptions.plannedPitstop = false;
-                        Main.settings.driver2AssistOptions.pitstopOnLap = 0f;
+                        Main.settings.driver2AssistOptions.pitstopOnLap = 0;
                     }
                     else
                     {
