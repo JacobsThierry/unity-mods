@@ -587,7 +587,7 @@ namespace Assistant
                 text = new TextDynamicData();
                 //This is awfull
                 text.textID = "We planned to pit this lap !";
-                
+
 
             }
 
@@ -775,8 +775,112 @@ namespace Assistant
             return lapLeft;
         }
 
+        internal static float GetMechanicFuelBurnRate(RacingVehicle vehicle)
+        {
+            float mMechanicFuelBurnRate = 1f;
+
+            if (vehicle.bonuses.IsBonusActive(MechanicBonus.Trait.FuelEconomy))
+            {
+                mMechanicFuelBurnRate = DesignDataManager.instance.GetDesignData().carPerformance.bonuses.lowFuelBurnRateBonus;
+            }
+            return mMechanicFuelBurnRate;
+        }
+
+        internal static float GetDriverFuelBurnRate(RacingVehicle vehicle)
+        {
+            float mDriverFuelBurnRate = 1f;
+            if (vehicle.driver.personalityTraitController.HasSpecialCase(PersonalityTrait.SpecialCaseType.FuelBurnLow))
+            {
+                mDriverFuelBurnRate = DesignDataManager.instance.GetDesignData().carPerformance.bonuses.lowFuelBurnRateBonus;
+            }
+            else if (vehicle.driver.personalityTraitController.HasSpecialCase(PersonalityTrait.SpecialCaseType.FuelBurnHigh))
+            {
+                mDriverFuelBurnRate = DesignDataManager.instance.GetDesignData().carPerformance.bonuses.highFuelBurnRateBonus;
+            }
+            return mDriverFuelBurnRate;
+        }
+
+        internal static float GetChassisBonusModifier(RacingVehicle vehicle)
+        {
+
+            List<BonusChassisStats> activePartBonus = vehicle.car.GetActivePartBonus<BonusChassisStats>(vehicle);
+            float mFuelChassisBonusModifier = 0f;
+            for (int i = 0; i < activePartBonus.Count; i++)
+            {
+                if (activePartBonus[i].stat == CarChassisStats.Stats.FuelEfficiency)
+                {
+                    mFuelChassisBonusModifier += activePartBonus[i].bonusValue;
+                }
+            }
+            return mFuelChassisBonusModifier;
+        }
+
+        internal static float getEnginemodeBurnRate(Fuel.EngineMode engineMode)
+        {
+            DesignData d = DesignDataManager.instance.GetDesignData();
+            CarPerformanceDesignData mCarPerformance = d.carPerformance;
+            float mEngineModeFuelBurnRate = 1f;
+
+            switch (engineMode)
+            {
+                case Fuel.EngineMode.Low:
+                    mEngineModeFuelBurnRate = mCarPerformance.fuel.lowBurnRate;
+                    break;
+                case Fuel.EngineMode.Medium:
+                    mEngineModeFuelBurnRate = mCarPerformance.fuel.mediumBurnRate;
+                    break;
+                case Fuel.EngineMode.High:
+                    mEngineModeFuelBurnRate = mCarPerformance.fuel.highBurnRate;
+                    break;
+                case Fuel.EngineMode.Overtake:
+                    mEngineModeFuelBurnRate = mCarPerformance.fuel.overtakeBurnRate;
+                    break;
+                case Fuel.EngineMode.SuperOvertake:
+                    mEngineModeFuelBurnRate = mCarPerformance.fuel.superOvertakeBurnRate;
+                    break;
+            }
+            return mEngineModeFuelBurnRate;
+        }
+
+
+
+        internal static float GetFuelBurnRate(RacingVehicle vehicle, Fuel.EngineMode engineMode)
+        {
+            float mDriverFuelBurnRate = Assistant.GetDriverFuelBurnRate(vehicle);
+            float mEngineModeFuelBurnRate = getEnginemodeBurnRate(engineMode);
+            float mChassisFuelBurnRate = getChassisFuelBurnRate(vehicle);
+            float mMechanicFuelBurnRate = GetMechanicFuelBurnRate(vehicle);
+
+
+            float num = (mDriverFuelBurnRate + mEngineModeFuelBurnRate + mChassisFuelBurnRate + mMechanicFuelBurnRate) / 4f;
+
+            if (vehicle.ERSController.isInHybridMode)
+            {
+                num = Mathf.Max(0f, num - DesignDataManager.instance.GetDesignData().ERSDesignData.hybridModeFuelSave);
+            }
+
+            return num;
+        }
+
+
+        internal static float getChassisFuelBurnRate(RacingVehicle vehicle)
+        {
+
+
+            float mFuelChassisBonusModifier = GetChassisBonusModifier(vehicle);
+
+            float stat = vehicle.car.ChassisStats.GetStat(CarChassisStats.Stats.FuelEfficiency, true, vehicle.car);
+            float t = Mathf.Clamp01((stat + GameStatsConstants.chassisStatMax * mFuelChassisBonusModifier) / GameStatsConstants.chassisStatMax);
+            float fuelEfficiencyChassisStatNegativeImpact = DesignDataManager.instance.GetDesignData().carChassis.fuelEfficiencyChassisStatNegativeImpact;
+            float fuelEfficiencyChassisStatPositiveImpact = DesignDataManager.instance.GetDesignData().carChassis.fuelEfficiencyChassisStatPositiveImpact;
+
+            return Mathf.Lerp(fuelEfficiencyChassisStatNegativeImpact, fuelEfficiencyChassisStatPositiveImpact, t);
+
+        }
+
         internal static void AssistEngine(DriverAssistOptions options, RacingVehicle vehicle)
         {
+            
             if (Game.instance.sessionManager.isSafetyCarFlag)
             {
                 vehicle.performance.fuel.SetEngineMode(Fuel.EngineMode.Low);
@@ -792,25 +896,25 @@ namespace Assistant
 
             float lapLeft = getLapLeft(options, vehicle);
 
-            
+
 
             if (!options.smartEngine)
             {
-                if (fuelLapsRemainingDecimal > lapLeft * 1.45f && vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
+                if (fuelLapsRemainingDecimal > lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.SuperOvertake) && vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
                 {
                     mode = Fuel.EngineMode.SuperOvertake;
 
                 }
-                else if (fuelLapsRemainingDecimal > lapLeft * 1.35f)
+                else if (fuelLapsRemainingDecimal > lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.Overtake))
                 {
                     mode = Fuel.EngineMode.Overtake;
                 }
-                else if (fuelLapsRemainingDecimal > lapLeft * 1.05)
+                else if (fuelLapsRemainingDecimal > lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.High))
                 {
                     mode = Fuel.EngineMode.High;
 
                 }
-                else if (fuelLapsRemainingDecimal > lapLeft * 0.9f)
+                else if (fuelLapsRemainingDecimal > lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.Medium))
                 {
                     mode = Fuel.EngineMode.Medium;
                 }
@@ -821,24 +925,19 @@ namespace Assistant
             }
             else
             {
-
-
-
-                //If we don't have enough fuel, save it. If we have too much fuel, use it
-                if (fuelLapsRemainingDecimal < lapLeft * 0.85f)
-                {
+                //If we don't have enough fuel we save it, if we have too much fuel we use it
+                if(fuelLapsRemainingDecimal < (lapLeft + 0.02) * (GetFuelBurnRate(vehicle, Fuel.EngineMode.Low))){
                     mode = Fuel.EngineMode.Low;
                 }
-                else if (fuelLapsRemainingDecimal < lapLeft * 0.9f)
-                {
+                else if ((fuelLapsRemainingDecimal > lapLeft * (GetFuelBurnRate(vehicle, Fuel.EngineMode.Low)) && (fuelLapsRemainingDecimal < lapLeft * (GetFuelBurnRate(vehicle, Fuel.EngineMode.Medium))))){
                     mode = Fuel.EngineMode.Medium;
                 }
-                else if (fuelLapsRemainingDecimal > lapLeft * 1.45f && vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
+                else if (fuelLapsRemainingDecimal > lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.SuperOvertake) && vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
                 {
                     mode = Fuel.EngineMode.SuperOvertake;
 
                 }
-                else if (fuelLapsRemainingDecimal > lapLeft * 1.35f && !vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
+                else if (fuelLapsRemainingDecimal > lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.Overtake) && !vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
                 {
                     mode = Fuel.EngineMode.Overtake;
                 }
@@ -863,17 +962,17 @@ namespace Assistant
                     }
                     else
                     {
-                        //Save more fuel than in non-smart mode
-                        if (fuelLapsRemainingDecimal > lapLeft * 1.4f && vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
+                        //Save more fuel than in non-smart mode in a super arbitrary manner
+                        if (fuelLapsRemainingDecimal > lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.Overtake) * 1.1 && vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
                         {
                             mode = Fuel.EngineMode.Overtake; //If we have super overtake, overtake can be used as a fuel saving mode
                         }
-                        else if (fuelLapsRemainingDecimal > lapLeft * 1.2)
+                        else if (fuelLapsRemainingDecimal > lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.High) * 1.05)
                         {
                             mode = Fuel.EngineMode.High;
 
                         }
-                        else if (fuelLapsRemainingDecimal > lapLeft * 1)
+                        else if (fuelLapsRemainingDecimal > lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.Medium) * 1.025)
                         {
                             mode = Fuel.EngineMode.Medium;
                         }
@@ -923,12 +1022,13 @@ namespace Assistant
         }
     }
 
+
+
     [HarmonyPatch(typeof(SessionStrategy), "OnEnterGate")]
     static class SessionStrategy_OnEnterGate_Patch
     {
         static void Prefix(SessionStrategy __instance, RacingVehicle ___mVehicle, int inGateID, PathData.GateType inGateType)
         {
-            
             if (!Main.enabled || inGateID % 2 != 0) return;
 
             var sessionType = Game.instance.sessionManager.eventDetails.currentSession.sessionType;
@@ -961,7 +1061,7 @@ namespace Assistant
                     {
                         Assistant.NotifyPit(Main.settings.driver1AssistOptions, vehicle);
                     }
-                    
+
 
                 }
                 else if (vehicle.carID == 1)
