@@ -502,10 +502,11 @@ namespace Assistant
                 }
                 else
                 {
-
                     //Do not eat the tyre if would make us pit too early
                     if (mode == DrivingStyle.Mode.Attack)
                     {
+                        float tyreWear = tyre.GetCondition();
+
                         SessionTimer.PitstopData lastPit = vehicle.timer.currentPitstop;
                         int lastPitLap;
                         if (lastPit == null)
@@ -526,17 +527,26 @@ namespace Assistant
 
 
                         float nextPitLap = options.pitstopOnLap;
+
+                        if(!options.plannedPitstop)
+                        {
+                            nextPitLap = Game.instance.sessionManager.lapCount;
+                        }
+
                         float relayLength = nextPitLap - lastPitLap;
                         float lapsInRelay = vehicle.timer.lap + vehicle.pathController.distanceAlongTrackPath01 - lastPitLap;
+                        float clifCondition = vehicle.setup.tyreSet.GetCliffCondition();
+
+
 
                         float relayPercent = 1;
                         if (relayLength > 0)
                         {
                             relayPercent = lapsInRelay / relayLength;
 
-                            float tyreWear = tyre.GetCondition();
+                            Main.logger.Log(tyreWear.ToString());
 
-                            if (relayPercent > 0.2 && (1 - relayPercent + 0.2) > tyreWear)
+                            if (relayPercent > clifCondition && (relayPercent - clifCondition) > tyreWear)
                             {
                                 mode = DrivingStyle.Mode.Push;
                             }
@@ -636,7 +646,6 @@ namespace Assistant
 
             if (options.plannedPitstop && options.pitstopOnLap == vehicle.timer.lap + 1)
             {
-                Main.logger.Log("foo");
                 TeamRadioManager manager = Game.instance.sessionManager.teamRadioManager;
                 RadioMessagePlannedPit message = new RadioMessagePlannedPit(vehicle, vehicle.teamRadio);
                 message.CreateDialogQuery();
@@ -896,25 +905,30 @@ namespace Assistant
 
             float lapLeft = getLapLeft(options, vehicle);
 
+            float superOvertakeConsum = GetFuelBurnRate(vehicle, Fuel.EngineMode.SuperOvertake);
+            float overtakeConsum = GetFuelBurnRate(vehicle, Fuel.EngineMode.Overtake);
+            float highConsum = GetFuelBurnRate(vehicle, Fuel.EngineMode.High);
+            float medConsum = GetFuelBurnRate(vehicle, Fuel.EngineMode.Medium);
+            float lowConsum = GetFuelBurnRate(vehicle, Fuel.EngineMode.Low);
 
 
             if (!options.smartEngine)
             {
-                if (fuelLapsRemainingDecimal > lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.SuperOvertake) && vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
+                if (fuelLapsRemainingDecimal > lapLeft * superOvertakeConsum && vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
                 {
                     mode = Fuel.EngineMode.SuperOvertake;
 
                 }
-                else if (fuelLapsRemainingDecimal > lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.Overtake))
+                else if (fuelLapsRemainingDecimal > lapLeft * overtakeConsum)
                 {
                     mode = Fuel.EngineMode.Overtake;
                 }
-                else if (fuelLapsRemainingDecimal > lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.High))
+                else if (fuelLapsRemainingDecimal > lapLeft * highConsum)
                 {
                     mode = Fuel.EngineMode.High;
 
                 }
-                else if (fuelLapsRemainingDecimal > lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.Medium))
+                else if (fuelLapsRemainingDecimal > lapLeft * medConsum)
                 {
                     mode = Fuel.EngineMode.Medium;
                 }
@@ -926,18 +940,15 @@ namespace Assistant
             else
             {
                 //If we don't have enough fuel we save it, if we have too much fuel we use it
-                if(fuelLapsRemainingDecimal < (lapLeft + 0.02) * (GetFuelBurnRate(vehicle, Fuel.EngineMode.Low))){
+                if(fuelLapsRemainingDecimal < (lapLeft + 0.02) * lowConsum){
                     mode = Fuel.EngineMode.Low;
                 }
-                else if ((fuelLapsRemainingDecimal > lapLeft * (GetFuelBurnRate(vehicle, Fuel.EngineMode.Low)) && (fuelLapsRemainingDecimal < lapLeft * (GetFuelBurnRate(vehicle, Fuel.EngineMode.Medium))))){
-                    mode = Fuel.EngineMode.Medium;
-                }
-                else if (fuelLapsRemainingDecimal > lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.SuperOvertake) && vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
+                else if (fuelLapsRemainingDecimal > lapLeft * superOvertakeConsum && vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
                 {
                     mode = Fuel.EngineMode.SuperOvertake;
 
                 }
-                else if (fuelLapsRemainingDecimal > lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.Overtake) && !vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
+                else if (fuelLapsRemainingDecimal > lapLeft * overtakeConsum && !vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
                 {
                     mode = Fuel.EngineMode.Overtake;
                 }
@@ -963,16 +974,16 @@ namespace Assistant
                     else
                     {
                         //Save more fuel than in non-smart mode in a super arbitrary manner
-                        if (fuelLapsRemainingDecimal > lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.Overtake) * 1.1 && vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
+                        if (fuelLapsRemainingDecimal > lapLeft * overtakeConsum * 1.05 && vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
                         {
                             mode = Fuel.EngineMode.Overtake; //If we have super overtake, overtake can be used as a fuel saving mode
                         }
-                        else if (fuelLapsRemainingDecimal > lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.High) * 1.05)
+                        else if (fuelLapsRemainingDecimal > lapLeft * highConsum * 1.025 )
                         {
                             mode = Fuel.EngineMode.High;
 
                         }
-                        else if (fuelLapsRemainingDecimal > lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.Medium) * 1.025)
+                        else if (fuelLapsRemainingDecimal > lapLeft * medConsum * 1.05 )
                         {
                             mode = Fuel.EngineMode.Medium;
                         }
