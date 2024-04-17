@@ -14,15 +14,15 @@ namespace Assistant
     {
         [Header("Driving")]
         [Draw("Enabled")] public bool driving = false;
-        [Draw("Max on the 1st lap", VisibleOn = "driving|True")] public bool boostDrive = false;
+        [Draw("Max on the 1st lap", VisibleOn = "#MaxDrivingFirtLapVisible|True")] public bool boostDrive = false;
 
-        [Draw("Auto manage tyre", VisibleOn = "driving|True")] public bool autoTyre = false;
+        [Draw("Smart tyre", VisibleOn = "driving|True")] public bool autoTyre = false;
         [Draw("Hold tyre temperature", DrawType.Slider, Min = 0, Max = 100, Precision = 0, VisibleOn = "#TyreTemperatureVisible|True")] public float temperature = 70f;
 
         [Header("Engine")]
         [Draw("Enabled")] public bool engine = false;
-        [Draw("Max on the 1st lap", VisibleOn = "engine|True")] public bool boostEngine = false;
-        [Draw("Smart engine usage", VisibleOn = "engine|True")] public bool smartEngine = false;
+        [Draw("Max on the 1st lap", VisibleOn = "#MaxEngineFirtLapVisible|True")] public bool boostEngine = false;
+        [Draw("Smart engine", VisibleOn = "engine|True")] public bool smartEngine = false;
 
 
         [Header("Pitstop")]
@@ -46,6 +46,8 @@ namespace Assistant
         bool HoldfuelVisible => engine && !plannedPitstop;
         bool TyreTemperatureVisible => driving && !autoTyre;
         bool StintLengthVisible => autoPitstop && OnlapVisible;
+        bool MaxEngineFirtLapVisible => engine && !smartEngine;
+        bool MaxDrivingFirtLapVisible => driving && !autoTyre;
 
 
         private void SetPitStop()
@@ -362,19 +364,36 @@ namespace Assistant
             float pace = vehicle.performance.estimatedBestLapTime;
             float paceAhead = pace;
 
+            int teamID = vehicle.driver.contract.GetTeam().teamID;
+            bool teamMateAhead = vehicle.standingsPosition != 1 && vehicle.ahead.driver.contract.GetTeam().teamID == teamID;
+            RacingVehicle vehicleBeheind = vehicle.behind;
+            RacingVehicle vehicleAhead = vehicle.ahead;
+            bool teamMateBeheind = vehicle.standingsPosition != Game.instance.sessionManager.GetVehicleCount() && vehicleBeheind != null && vehicleBeheind.movementEnabled && vehicleBeheind.driver.contract.GetTeam().teamID == teamID;
+
+            if(defend && teamMateBeheind)
+            {
+                defend = false;
+                save = true;
+            }
+
+            if (!defend && teamMateAhead && ! (vehicleAhead.strategy.teamOrders == SessionStrategy.TeamOrders.AllowTeamMateThrough))
+            {
+                attack = false;
+                save = true;
+            }
+
             if (vehicle.standingsPosition != 1)
             {
                 paceAhead = vehicle.ahead.performance.estimatedBestLapTime;
             }
 
             //Do not waste fuel and tyre if vehicle ahead is too fast if we're on the first half of the race
-            if (attack && pace + 0.1f < paceAhead && GetLapsRemainingDecimal(vehicle) < vehicle.timer.lap)
+            if (attack && gapAhead > 0.2f && pace <= paceAhead + 0.5f && GetLapsRemainingDecimal(vehicle) < vehicle.timer.lap)
             {
                 attack = false;
                 save = true;
             }
-
-
+            
 
             float paceBeheind = pace;
 
@@ -388,10 +407,12 @@ namespace Assistant
                 defend = false;
             }
 
-            int teamID = vehicle.driver.contract.GetTeam().teamID;
+
+
+
 
             //If the vehicle ahead is our teammate and we have to let him ahead, we save fuel and tyre
-            if (!defend && vehicle.standingsPosition != 1 && vehicle.ahead.driver.contract.GetTeam().teamID == teamID && vehicle.strategy.teamOrders == SessionStrategy.TeamOrders.AllowTeamMateThrough && gapAhead < 2f)
+            if (!defend && teamMateAhead && gapAhead < 2f)
             {
                 return Behaviour.Save;
             }
@@ -507,7 +528,7 @@ namespace Assistant
 
                 if (Game.instance.sessionManager.eventDetails.currentSession.sessionType == SessionDetails.SessionType.Practice)
                 {
-                    t = 0.5f;
+                    t = 0.2f;
                 }
                 else
                 {
@@ -582,7 +603,7 @@ namespace Assistant
             }
 
 
-            if (options.autoTyre)
+            if (options.autoTyre && ! (Game.instance.sessionManager.eventDetails.currentSession.sessionType == SessionDetails.SessionType.Practice) )
             {
 
                 if (temp > 0.80 && mode < DrivingStyle.Mode.Conserve)
@@ -769,14 +790,13 @@ namespace Assistant
         internal static void AssistERS(DriverAssistOptions options, RacingVehicle vehicle)
         {
 
+
             if (!options.ers || Game.instance.sessionManager.eventDetails.currentSession.sessionType != SessionDetails.SessionType.Race)
             {
+                vehicle.ERSController.autoControlERS = true;
                 return;
             }
-            if (!options.ers)
-            {
-                vehicle.ERSController.autoControlERS = true;
-            }
+
 
             if (vehicle.ERSController.state == ERSController.ERSState.Broken || vehicle.ERSController.state == ERSController.ERSState.NotVisible)
             {
@@ -805,21 +825,21 @@ namespace Assistant
             if (hybrideEnabled)
             {
                 //If we don't have enough fuel to finish the race, immediatly use the hybrid mode
-                if (lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.Low) > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
+                if ((lapLeft + 0.2) * GetFuelBurnRate(vehicle, Fuel.EngineMode.Low) > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
                 {
                     SetErs(vehicle, ERSController.Mode.Hybrid);
                     return;
                 }
 
                 //If we barely have enough fuel, wait before using the hybride mode so that the power mode is available if needed
-                if (vehicle.ERSController.normalizedCharge > 0.6 && lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.Medium) > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
+                if (vehicle.ERSController.normalizedCharge > 0.6 && (lapLeft + 0.2) * GetFuelBurnRate(vehicle, Fuel.EngineMode.Medium) > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
                 {
                     SetErs(vehicle, ERSController.Mode.Hybrid);
                     return;
-                }
+                } 
                 else
                 {
-                    if (vehicle.ERSController.isInHybridMode && lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.Medium) > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
+                    if (vehicle.ERSController.isInHybridMode && (lapLeft + 0.2) * GetFuelBurnRate(vehicle, Fuel.EngineMode.Medium) > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
                     {
                         return;
                     }
@@ -1225,6 +1245,7 @@ namespace Assistant
                 Assistant.AssistERS(option, vehicle);
                 Assistant.AssistEngine(option, vehicle);
 
+                
 
                 if (inGateID == 30)
                 {
