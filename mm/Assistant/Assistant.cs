@@ -333,27 +333,112 @@ namespace Assistant
     static class Assistant
     {
 
-        internal static float getMinGap(RacingVehicle vehicle)
+        internal enum Behaviour : int
+        {
+            Defend = 0,
+            Attack = 1,
+            Both = 2,
+            Drive = 3,
+            Save = 4
+        }
+
+
+
+        internal static Behaviour SelectBehaviour(RacingVehicle vehicle)
+        {
+
+            if (Game.instance.sessionManager.flag == SessionManager.Flag.SafetyCar || Game.instance.sessionManager.flag == SessionManager.Flag.VirtualSafetyCar || (vehicle.timer.currentSector == Game.instance.sessionManager.yellowFlagSector && Game.instance.sessionManager.flag == SessionManager.Flag.Yellow))
+            {
+                return Behaviour.Save;
+            }
+
+            float gapAhead = GetGapAhead(vehicle);
+            float gapBehind = GetGapBeheind(vehicle);
+
+            bool attack = gapAhead < 0.6f || gapBehind < 0.5f;
+            bool defend = gapBehind < 0.8f;
+            bool save = false;
+
+            float pace = vehicle.performance.estimatedBestLapTime;
+            float paceAhead = pace;
+
+            if (vehicle.standingsPosition != 1)
+            {
+                paceAhead = vehicle.ahead.performance.estimatedBestLapTime;
+            }
+
+            //Do not waste fuel and tyre if vehicle ahead is too fast if we're on the first half of the race
+            if (attack && pace + 0.1f < paceAhead && GetLapsRemainingDecimal(vehicle) < vehicle.timer.lap)
+            {
+                attack = false;
+                save = true;
+            }
+
+
+
+            float paceBeheind = pace;
+
+            if (vehicle.standingsPosition != Game.instance.sessionManager.GetVehicleCount())
+            {
+                paceBeheind = vehicle.behind.performance.estimatedBestLapTime;
+            }
+
+            if (defend && paceBeheind + 0.2f < pace)
+            {
+                defend = false;
+            }
+
+            int teamID = vehicle.driver.contract.GetTeam().teamID;
+
+            //If the vehicle ahead is our teammate and we have to let him ahead, we save fuel and tyre
+            if (!defend && vehicle.standingsPosition != 1 && vehicle.ahead.driver.contract.GetTeam().teamID == teamID && vehicle.strategy.teamOrders == SessionStrategy.TeamOrders.AllowTeamMateThrough && gapAhead < 2f)
+            {
+                return Behaviour.Save;
+            }
+
+            if (attack && defend) return Behaviour.Both;
+
+            if (defend) return Behaviour.Defend;
+
+            if (save) return Behaviour.Save;
+
+            if (attack) return Behaviour.Attack;
+
+
+
+            return Behaviour.Drive;
+
+        }
+
+        internal static float GetGapAhead(RacingVehicle vehicle)
         {
             int teamID = vehicle.driver.contract.GetTeam().teamID;
             float gapAhead = vehicle.timer.gapToAhead;
+            if (vehicle.standingsPosition == 1)
+            {
+                gapAhead = 999f;
+            }
 
-            //Prevent fighting teammate
             if (vehicle.standingsPosition != 1 && vehicle.ahead.driver.contract.GetTeam().teamID == teamID)
             {
                 gapAhead = 999f;
             }
 
-            float gapBehind = vehicle.timer.gapToBehind;
+            return gapAhead;
+        }
 
+        internal static float GetGapBeheind(RacingVehicle vehicle)
+        {
+
+            int teamID = vehicle.driver.contract.GetTeam().teamID;
             RacingVehicle vehicleBeheind = vehicle.behind;
-
+            float gapBehind = 999f;
 
             //I can't find how to check if a vehicle has crashed, but movementEnabled seems to be false if a vehicle has crashed
             // So I will use that i guess
-            if (!(vehicle.behind == null) && !vehicleBeheind.movementEnabled)
+            if (!(vehicle.behind == null) && vehicleBeheind.movementEnabled)
             {
-                gapBehind = 999f;
+                gapBehind = vehicle.timer.gapToBehind; ;
             }
 
             if (vehicle.standingsPosition != Game.instance.sessionManager.GetVehicleCount() && vehicle.behind.driver.contract.GetTeam().teamID == teamID)
@@ -361,20 +446,14 @@ namespace Assistant
                 gapBehind = 999f;
             }
 
+            return gapBehind;
 
+        }
 
+        internal static float getMinGap(RacingVehicle vehicle)
+        {
 
-            //If the car is first or last only use one gap
-            if (vehicle.standingsPosition == Game.instance.sessionManager.GetVehicleCount())
-            {
-                gapBehind = gapAhead;
-            }
-            if (vehicle.standingsPosition == 1)
-            {
-                gapAhead = gapBehind;
-            }
-
-            float minGap = Math.Min(gapAhead, gapBehind);
+            float minGap = Math.Min(GetGapAhead(vehicle), GetGapBeheind(vehicle));
 
             return minGap;
         }
@@ -386,9 +465,7 @@ namespace Assistant
             public float temp;
             public DateTime time;
         }
-
-
-
+        
 
 
         internal static readonly TyreLog tyre1 = new TyreLog();
@@ -398,10 +475,10 @@ namespace Assistant
         {
             if (!options.driving) return;
 
-            if ((Game.instance.time.now - tyreLog.time).TotalSeconds < 20)
+            if ((Game.instance.time.now - tyreLog.time).TotalSeconds < 10)
                 return;
 
-            if (Game.instance.sessionManager.isSafetyCarFlag)
+            if (Game.instance.sessionManager.flag == SessionManager.Flag.SafetyCar || Game.instance.sessionManager.flag == SessionManager.Flag.VirtualSafetyCar)
             {
                 vehicle.performance.drivingStyle.SetDrivingStyle(DrivingStyle.Mode.BackUp);
                 return;
@@ -434,22 +511,33 @@ namespace Assistant
                 }
                 else
                 {
+                    Behaviour behaviour = SelectBehaviour(vehicle);
 
-                    float minGap = Assistant.getMinGap(vehicle);
-
-                    if (minGap < 0.6f)
+                    if (behaviour == Behaviour.Attack || behaviour == Behaviour.Both)
                     {
-                        t = 0.75f;
+                        t = 0.7f;
+                        if (temp < t)
+                        {
+                            mode = DrivingStyle.Mode.Attack;
+                        }
+                    }
+                    else if (behaviour == Behaviour.Drive)
+                    {
+                        t = 0.5f;
                     }
                     else
                     {
-                        t = 0.25f;
+                        t = 0.3f;
                     }
-
 
                     if (vehicle.timer.currentSector == Game.instance.sessionManager.yellowFlagSector && Game.instance.sessionManager.flag == SessionManager.Flag.Yellow)
                     {
                         t = 0.05f;
+                    }
+
+                    if (behaviour == Behaviour.Defend && temp > t)
+                    {
+                        mode = DrivingStyle.Mode.BackUp;
                     }
                 }
 
@@ -472,6 +560,11 @@ namespace Assistant
                 if (tempChangeRate > -changeRate2)
                     mode = GetDecreaseDrivingStyle(GetDecreaseDrivingStyle(mode));
             }
+            else if (temp > t + 0.4f)
+            {
+                if (tempChangeRate > -changeRate2)
+                    mode = GetDecreaseDrivingStyle(GetDecreaseDrivingStyle(GetDecreaseDrivingStyle(mode)));
+            }
             else if (temp < t)
             {
                 if (tempChangeRate < changeRate)
@@ -491,71 +584,90 @@ namespace Assistant
 
             if (options.autoTyre)
             {
-                //Do not ruine the tyre if we're not fighting for a position
-                if (Assistant.getMinGap(vehicle) > 0.6f && mode == DrivingStyle.Mode.Attack)
+
+                if (temp > 0.80 && mode < DrivingStyle.Mode.Conserve)
                 {
-                    mode = GetDecreaseDrivingStyle(mode);
+                    mode = DrivingStyle.Mode.Conserve;
                 }
-                else if (Assistant.getMinGap(vehicle) > 0.6f && mode == DrivingStyle.Mode.BackUp)
+                else if (temp < 0.2 && mode > DrivingStyle.Mode.Push)
                 {
-                    mode = GetIncreaseDrivingStyle(mode);
+                    mode = DrivingStyle.Mode.Push;
                 }
                 else
                 {
-                    //Do not eat the tyre if would make us pit too early
-                    if (mode == DrivingStyle.Mode.Attack)
+                    Behaviour behaviour = SelectBehaviour(vehicle);
+
+                    if(behaviour == Behaviour.Drive && temp < t + 0.1f && temp > t - 0.1f)
                     {
-                        float tyreWear = tyre.GetCondition();
-
-                        SessionTimer.PitstopData lastPit = vehicle.timer.currentPitstop;
-                        int lastPitLap;
-                        if (lastPit == null)
+                        mode = DrivingStyle.Mode.Neutral;
+                    }
+                    //Do not ruine the tyre if we're not fighting for a position
+                    if ((!(behaviour == Behaviour.Attack || behaviour == Behaviour.Both)) && mode == DrivingStyle.Mode.Attack)
+                    {
+                        mode = GetDecreaseDrivingStyle(mode);
+                    }
+                    else if ((!(behaviour == Behaviour.Defend || behaviour == Behaviour.Both)) && mode == DrivingStyle.Mode.BackUp)
+                    {
+                        mode = GetIncreaseDrivingStyle(mode);
+                    }
+                    else
+                    {
+                        //Do not eat the tyre if would make us pit too early
+                        if (mode == DrivingStyle.Mode.Attack)
                         {
-                            lastPitLap = 0;
-                        }
-                        else
-                        {
-                            lastPitLap = lastPit.lapNumber;
-                        }
+                            float tyreWear = tyre.GetCondition();
 
-                        float num = vehicle.pathController.distanceAlongTrackPath01;
-                        if (num == 1f)
-                        {
-                            num = 0f;
-                        }
-
-
-
-                        float nextPitLap = options.pitstopOnLap;
-
-                        if(!options.plannedPitstop)
-                        {
-                            nextPitLap = Game.instance.sessionManager.lapCount;
-                        }
-
-                        float relayLength = nextPitLap - lastPitLap;
-                        float lapsInRelay = vehicle.timer.lap + vehicle.pathController.distanceAlongTrackPath01 - lastPitLap;
-                        float clifCondition = vehicle.setup.tyreSet.GetCliffCondition();
-
-
-
-                        float relayPercent = 1;
-                        if (relayLength > 0)
-                        {
-                            relayPercent = lapsInRelay / relayLength;
-
-                            Main.logger.Log(tyreWear.ToString());
-
-                            if (relayPercent > clifCondition && (relayPercent - clifCondition) > tyreWear)
+                            SessionTimer.PitstopData lastPit = vehicle.timer.currentPitstop;
+                            int lastPitLap;
+                            if (lastPit == null)
                             {
-                                mode = DrivingStyle.Mode.Push;
+                                lastPitLap = 0;
+                            }
+                            else
+                            {
+                                lastPitLap = lastPit.lapNumber;
+                            }
+
+                            float num = vehicle.pathController.distanceAlongTrackPath01;
+                            if (num == 1f)
+                            {
+                                num = 0f;
+                            }
+
+
+
+                            float nextPitLap = options.pitstopOnLap;
+
+                            if (!options.plannedPitstop)
+                            {
+                                nextPitLap = Game.instance.sessionManager.lapCount;
+                            }
+
+                            float relayLength = nextPitLap - lastPitLap;
+                            float lapsInRelay = vehicle.timer.lap + vehicle.pathController.distanceAlongTrackPath01 - lastPitLap;
+                            float clifCondition = vehicle.setup.tyreSet.GetCliffCondition();
+
+
+
+                            float relayPercent = 1;
+                            if (relayLength > 0)
+                            {
+                                relayPercent = lapsInRelay / relayLength;
+
+                                Main.logger.Log(tyreWear.ToString());
+
+                                if (relayPercent > clifCondition && (relayPercent - clifCondition) > tyreWear)
+                                {
+                                    mode = DrivingStyle.Mode.Push;
+                                }
                             }
                         }
-
+                        else if (mode == DrivingStyle.Mode.Conserve && behaviour == Behaviour.Defend)
+                        {
+                            mode = DrivingStyle.Mode.BackUp;
+                        }
 
                     }
-
-
 
                 }
             }
@@ -683,7 +795,7 @@ namespace Assistant
 
             bool hybrideEnabled = vehicle.championship.rules.isHybridModeActive;
 
-            bool powerEnabled = vehicle.championship.rules.isEnergySystemActive;
+            bool powerEnabled = vehicle.championship.rules.isEnergySystemActive && vehicle.timer.lap > 0;
 
 
 
@@ -692,15 +804,30 @@ namespace Assistant
 
             if (hybrideEnabled)
             {
-                if (lapLeft * 0.9 > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
+                //If we don't have enough fuel to finish the race, immediatly use the hybrid mode
+                if (lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.Low) > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
                 {
                     SetErs(vehicle, ERSController.Mode.Hybrid);
                     return;
                 }
 
+                //If we barely have enough fuel, wait before using the hybride mode so that the power mode is available if needed
+                if (vehicle.ERSController.normalizedCharge > 0.6 && lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.Medium) > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
+                {
+                    SetErs(vehicle, ERSController.Mode.Hybrid);
+                    return;
+                }
+                else
+                {
+                    if (vehicle.ERSController.isInHybridMode && lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.Medium) > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
+                    {
+                        return;
+                    }
+                }
+
             }
 
-            if (powerEnabled && !Game.instance.sessionManager.isSafetyCarFlag)
+            if (powerEnabled && !((Game.instance.sessionManager.flag == SessionManager.Flag.SafetyCar || Game.instance.sessionManager.flag == SessionManager.Flag.VirtualSafetyCar)))
             {
                 if (vehicle.timer.currentSector == Game.instance.sessionManager.yellowFlagSector && Game.instance.sessionManager.flag == SessionManager.Flag.Yellow)
                 {
@@ -711,12 +838,26 @@ namespace Assistant
 
                 float minGap = Assistant.getMinGap(vehicle);
 
-                //If we're about to get overtaken or if we're stuck beheind a car we active power mode
-                // Let's say that 1% power =~ 0.01 secs
-                if (minGap < vehicle.ERSController.normalizedCharge)
+                Behaviour behaviour = SelectBehaviour(vehicle);
+
+                if (behaviour == Behaviour.Attack || behaviour == Behaviour.Both)
                 {
-                    SetErs(vehicle, ERSController.Mode.Power);
-                    return;
+                    //if we're stuck beheind a car we active power mode
+                    // Let's say that 1% power =~ 0.01 secs
+                    if (minGap < vehicle.ERSController.normalizedCharge)
+                    {
+                        SetErs(vehicle, ERSController.Mode.Power);
+                        return;
+                    }
+                }
+                else if (behaviour == Behaviour.Defend)
+                {
+                    //Only use power if we're about to be overtaken
+                    if (minGap * 2 < vehicle.ERSController.normalizedCharge)
+                    {
+                        SetErs(vehicle, ERSController.Mode.Power);
+                        return;
+                    }
                 }
 
             }
@@ -724,12 +865,12 @@ namespace Assistant
             //If we're full on power we use it
             if (vehicle.ERSController.normalizedCharge > 0.90 && vehicle.ERSController.mode == ERSController.Mode.Harvest)
             {
-                if (!options.doNotSpendExcessOnHybride && hybrideEnabled && lapLeft * 1.3 > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
+                if (!options.doNotSpendExcessOnHybride && hybrideEnabled && lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.Overtake) > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
                 {
                     SetErs(vehicle, ERSController.Mode.Hybrid);
                     return;
                 }
-                else if (!Game.instance.sessionManager.isSafetyCarFlag)
+                else if (!((Game.instance.sessionManager.flag == SessionManager.Flag.SafetyCar || Game.instance.sessionManager.flag == SessionManager.Flag.VirtualSafetyCar)))
                 {
                     SetErs(vehicle, ERSController.Mode.Power);
                     return;
@@ -739,7 +880,7 @@ namespace Assistant
             else if (vehicle.ERSController.mode != ERSController.Mode.Harvest && vehicle.ERSController.normalizedCharge < 0.85)
             {
                 //Prevent switching to harvest mid overtake
-                if (vehicle.ERSController.mode == ERSController.Mode.Hybrid || (vehicle.ERSController.mode == ERSController.Mode.Power && Assistant.getMinGap(vehicle) > 5 * vehicle.ERSController.normalizedCharge))
+                if (vehicle.ERSController.mode == ERSController.Mode.Hybrid || (vehicle.ERSController.mode == ERSController.Mode.Power && SelectBehaviour(vehicle) != Behaviour.Attack && SelectBehaviour(vehicle) != Behaviour.Both))
                 {
                     SetErs(vehicle, ERSController.Mode.Harvest);
                     return;
@@ -862,12 +1003,12 @@ namespace Assistant
 
 
             float num = (mDriverFuelBurnRate + mEngineModeFuelBurnRate + mChassisFuelBurnRate + mMechanicFuelBurnRate) / 4f;
-
+            /*
             if (vehicle.ERSController.isInHybridMode)
             {
                 num = Mathf.Max(0f, num - DesignDataManager.instance.GetDesignData().ERSDesignData.hybridModeFuelSave);
             }
-
+            */
             return num;
         }
 
@@ -889,8 +1030,8 @@ namespace Assistant
 
         internal static void AssistEngine(DriverAssistOptions options, RacingVehicle vehicle)
         {
-            
-            if (Game.instance.sessionManager.isSafetyCarFlag)
+
+            if (Game.instance.sessionManager.flag == SessionManager.Flag.SafetyCar || Game.instance.sessionManager.flag == SessionManager.Flag.VirtualSafetyCar)
             {
                 vehicle.performance.fuel.SetEngineMode(Fuel.EngineMode.Low);
                 return;
@@ -940,23 +1081,32 @@ namespace Assistant
             else
             {
                 //If we don't have enough fuel we save it, if we have too much fuel we use it
-                if(fuelLapsRemainingDecimal < (lapLeft + 0.02) * lowConsum){
+                if (fuelLapsRemainingDecimal < (lapLeft + 0.02) * lowConsum)
+                {
                     mode = Fuel.EngineMode.Low;
                 }
-                else if (fuelLapsRemainingDecimal > lapLeft * superOvertakeConsum && vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
+                else if (fuelLapsRemainingDecimal < (lapLeft + 0.02) * medConsum)
+                {
+                    mode = Fuel.EngineMode.Medium;
+                }
+                else if ((fuelLapsRemainingDecimal > lapLeft * superOvertakeConsum || vehicle.ERSController.isInHybridMode) && vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
                 {
                     mode = Fuel.EngineMode.SuperOvertake;
 
                 }
-                else if (fuelLapsRemainingDecimal > lapLeft * overtakeConsum && !vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
+                else if ((fuelLapsRemainingDecimal > lapLeft * overtakeConsum || vehicle.ERSController.isInHybridMode) && !vehicle.bonuses.activeMechanicBonuses.Contains(MechanicBonus.Trait.SuperOvertakeMode))
                 {
                     mode = Fuel.EngineMode.Overtake;
                 }
                 else //Otherwise, burn fuel if we're fighting for a position and save it if we're not
                 {
-                    float minGap = Assistant.getMinGap(vehicle);
+                    Behaviour behaviour = SelectBehaviour(vehicle);
 
-                    if (minGap < 0.5f)
+                    if (behaviour == Behaviour.Save)
+                    {
+                        mode = Fuel.EngineMode.Low;
+                    }
+                    else if (behaviour == Behaviour.Attack || behaviour == Behaviour.Both)
                     {
                         if (vehicle.timer.currentSector == Game.instance.sessionManager.yellowFlagSector && Game.instance.sessionManager.flag == SessionManager.Flag.Yellow)
                         {
@@ -978,12 +1128,12 @@ namespace Assistant
                         {
                             mode = Fuel.EngineMode.Overtake; //If we have super overtake, overtake can be used as a fuel saving mode
                         }
-                        else if (fuelLapsRemainingDecimal > lapLeft * highConsum * 1.025 )
+                        else if (fuelLapsRemainingDecimal > lapLeft * highConsum * 1.025)
                         {
                             mode = Fuel.EngineMode.High;
 
                         }
-                        else if (fuelLapsRemainingDecimal > lapLeft * medConsum * 1.05 )
+                        else if (fuelLapsRemainingDecimal > lapLeft * medConsum)
                         {
                             mode = Fuel.EngineMode.Medium;
                         }
@@ -1060,33 +1210,27 @@ namespace Assistant
                     return;
                 }
 
-                if (vehicle.carID == 0)
+                DriverAssistOptions option = Main.settings.driver1AssistOptions;
+                Assistant.TyreLog tyreLog = Assistant.tyre1;
+
+                if (vehicle.carID == 1)
                 {
-                    Assistant.AssistDrive(Main.settings.driver1AssistOptions, vehicle, Assistant.tyre1);
-                    if (inGateID % 10 == 0)
-                        Assistant.AssistEngine(Main.settings.driver1AssistOptions, vehicle);
-                    Assistant.AssistERS(Main.settings.driver1AssistOptions, vehicle);
-
-                    //Idk if it's always working or not
-                    if (inGateID == 30)
-                    {
-                        Assistant.NotifyPit(Main.settings.driver1AssistOptions, vehicle);
-                    }
-
-
+                    option = Main.settings.driver2AssistOptions;
+                    tyreLog = Assistant.tyre2;
+                   
                 }
-                else if (vehicle.carID == 1)
+                
+
+                Assistant.AssistDrive(option, vehicle, tyreLog);
+                Assistant.AssistERS(option, vehicle);
+                Assistant.AssistEngine(option, vehicle);
+
+
+                if (inGateID == 30)
                 {
-                    Assistant.AssistDrive(Main.settings.driver2AssistOptions, vehicle, Assistant.tyre2);
-                    if (inGateID % 10 == 0)
-                        Assistant.AssistEngine(Main.settings.driver2AssistOptions, vehicle);
-                    Assistant.AssistERS(Main.settings.driver2AssistOptions, vehicle);
-
-                    if (inGateID == 30)
-                    {
-                        Assistant.NotifyPit(Main.settings.driver2AssistOptions, vehicle);
-                    }
+                    Assistant.NotifyPit(option, vehicle);
                 }
+
             }
 
             if (Main.settings.practiceAssistOptions.enabled && sessionType == SessionDetails.SessionType.Practice
@@ -1385,32 +1529,36 @@ namespace Assistant
 
 
 
-                if (vehicle.carID == 0 && Main.settings.driver1AssistOptions.engine && Main.settings.driver1AssistOptions.plannedPitstop)
+                if (!(vehicle.strategy.previousStatus == SessionStrategy.Status.PitThruPenalty))
                 {
-                    var pitQueue = new Queue<int>(Main.settings.driver1AssistOptions.nextPitstops);
-                    if (pitQueue.Count == 0)
+
+                    if (vehicle.carID == 0 && Main.settings.driver1AssistOptions.engine && Main.settings.driver1AssistOptions.plannedPitstop)
                     {
-                        Main.settings.driver1AssistOptions.plannedPitstop = false;
-                        Main.settings.driver1AssistOptions.pitstopOnLap = 0;
+                        var pitQueue = new Queue<int>(Main.settings.driver1AssistOptions.nextPitstops);
+                        if (pitQueue.Count == 0)
+                        {
+                            Main.settings.driver1AssistOptions.plannedPitstop = false;
+                            Main.settings.driver1AssistOptions.pitstopOnLap = 0;
+                        }
+                        else
+                        {
+                            Main.settings.driver1AssistOptions.pitstopOnLap = pitQueue.Dequeue();
+                            Main.settings.driver1AssistOptions.nextPitstops = pitQueue.ToArray();
+                        }
                     }
-                    else
+                    if (vehicle.carID == 1 && Main.settings.driver2AssistOptions.engine && Main.settings.driver2AssistOptions.plannedPitstop)
                     {
-                        Main.settings.driver1AssistOptions.pitstopOnLap = pitQueue.Dequeue();
-                        Main.settings.driver1AssistOptions.nextPitstops = pitQueue.ToArray();
-                    }
-                }
-                if (vehicle.carID == 1 && Main.settings.driver2AssistOptions.engine && Main.settings.driver2AssistOptions.plannedPitstop)
-                {
-                    var pitQueue = new Queue<int>(Main.settings.driver2AssistOptions.nextPitstops);
-                    if (pitQueue.Count == 0)
-                    {
-                        Main.settings.driver2AssistOptions.plannedPitstop = false;
-                        Main.settings.driver2AssistOptions.pitstopOnLap = 0;
-                    }
-                    else
-                    {
-                        Main.settings.driver2AssistOptions.pitstopOnLap = pitQueue.Dequeue();
-                        Main.settings.driver2AssistOptions.nextPitstops = pitQueue.ToArray();
+                        var pitQueue = new Queue<int>(Main.settings.driver2AssistOptions.nextPitstops);
+                        if (pitQueue.Count == 0)
+                        {
+                            Main.settings.driver2AssistOptions.plannedPitstop = false;
+                            Main.settings.driver2AssistOptions.pitstopOnLap = 0;
+                        }
+                        else
+                        {
+                            Main.settings.driver2AssistOptions.pitstopOnLap = pitQueue.Dequeue();
+                            Main.settings.driver2AssistOptions.nextPitstops = pitQueue.ToArray();
+                        }
                     }
                 }
             }
