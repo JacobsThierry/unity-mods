@@ -357,6 +357,7 @@ namespace Assistant
             float gapAhead = GetGapAhead(vehicle);
             float gapBehind = GetGapBeheind(vehicle);
 
+
             bool attack = gapAhead < 0.6f || gapBehind < 0.5f;
             bool defend = gapBehind < 0.8f;
             bool save = false;
@@ -370,16 +371,21 @@ namespace Assistant
             RacingVehicle vehicleAhead = vehicle.ahead;
             bool teamMateBeheind = vehicle.standingsPosition != Game.instance.sessionManager.GetVehicleCount() && vehicleBeheind != null && vehicleBeheind.movementEnabled && vehicleBeheind.driver.contract.GetTeam().teamID == teamID;
 
-            if(defend && teamMateBeheind)
+            if (defend && teamMateBeheind)
             {
                 defend = false;
                 save = true;
             }
 
-            if (!defend && teamMateAhead && ! (vehicleAhead.strategy.teamOrders == SessionStrategy.TeamOrders.AllowTeamMateThrough))
+            if (!defend && teamMateAhead)
             {
+
                 attack = false;
-                save = true;
+
+                if (!(vehicleAhead.strategy.teamOrders == SessionStrategy.TeamOrders.AllowTeamMateThrough))
+                {
+                    save = true;
+                }
             }
 
             if (vehicle.standingsPosition != 1)
@@ -387,13 +393,6 @@ namespace Assistant
                 paceAhead = vehicle.ahead.performance.estimatedBestLapTime;
             }
 
-            //Do not waste fuel and tyre if vehicle ahead is too fast if we're on the first half of the race
-            if (attack && gapAhead > 0.2f && pace <= paceAhead + 0.5f && GetLapsRemainingDecimal(vehicle) < vehicle.timer.lap)
-            {
-                attack = false;
-                save = true;
-            }
-            
 
             float paceBeheind = pace;
 
@@ -406,7 +405,7 @@ namespace Assistant
             {
                 defend = false;
             }
-            
+
 
             //If the vehicle ahead is our teammate and we have to let him ahead, we save fuel and tyre
             if (!defend && teamMateAhead && gapAhead < 2f)
@@ -418,9 +417,11 @@ namespace Assistant
 
             if (defend) return Behaviour.Defend;
 
+            if (attack) return Behaviour.Attack;
+
             if (save) return Behaviour.Save;
 
-            if (attack) return Behaviour.Attack;
+            
 
 
 
@@ -483,7 +484,7 @@ namespace Assistant
             public float temp;
             public DateTime time;
         }
-        
+
 
 
         internal static readonly TyreLog tyre1 = new TyreLog();
@@ -600,7 +601,7 @@ namespace Assistant
             }
 
 
-            if (options.autoTyre && ! (Game.instance.sessionManager.eventDetails.currentSession.sessionType == SessionDetails.SessionType.Practice) )
+            if (options.autoTyre && !(Game.instance.sessionManager.eventDetails.currentSession.sessionType == SessionDetails.SessionType.Practice))
             {
 
                 if (temp > 0.80 && mode < DrivingStyle.Mode.Conserve)
@@ -615,7 +616,7 @@ namespace Assistant
                 {
                     Behaviour behaviour = SelectBehaviour(vehicle);
 
-                    if(behaviour == Behaviour.Drive && temp < t + 0.1f && temp > t - 0.1f)
+                    if (behaviour == Behaviour.Drive && temp < t + 0.1f && temp > t - 0.1f)
                     {
                         mode = DrivingStyle.Mode.Neutral;
                     }
@@ -800,7 +801,7 @@ namespace Assistant
 
         internal static void AssistERS(DriverAssistOptions options, RacingVehicle vehicle)
         {
-            
+
             if (!options.ers || Game.instance.sessionManager.eventDetails.currentSession.sessionType != SessionDetails.SessionType.Race)
             {
                 vehicle.ERSController.autoControlERS = true;
@@ -816,7 +817,7 @@ namespace Assistant
             //In game, the ERS should be set to "Auto" and not "manual". I guess the UI take the control if it's set to manual.
             vehicle.ERSController.autoControlERS = false;
 
-            if (vehicle.ERSController.normalizedCharge < 0.10)
+            if (vehicle.ERSController.normalizedCharge < 0.05)
             {
                 return;
             }
@@ -835,9 +836,9 @@ namespace Assistant
             if (hybrideEnabled)
             {
 
-                if(vehicle.timer.lap == 0 && vehicle.championship.rules.raceStart == ChampionshipRules.RaceStart.StandingStart) //Can't use power on the first lap of standing start
+                if (vehicle.timer.lap == 0 && vehicle.championship.rules.raceStart == ChampionshipRules.RaceStart.StandingStart) //Can't use power on the first lap of standing start
                 {
-                    if(vehicle.ERSController.normalizedCharge > 0.99)
+                    if (vehicle.ERSController.normalizedCharge > 0.99)
                     {
                         SetErs(vehicle, ERSController.Mode.Hybrid);
                     }
@@ -860,7 +861,7 @@ namespace Assistant
                 {
                     SetErs(vehicle, ERSController.Mode.Hybrid);
                     return;
-                } 
+                }
                 else
                 {
                     if (vehicle.ERSController.isInHybridMode && (lapLeft) * GetFuelBurnRate(vehicle, Fuel.EngineMode.Medium) > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
@@ -873,8 +874,8 @@ namespace Assistant
 
             if (powerEnabled && !((Game.instance.sessionManager.flag == SessionManager.Flag.SafetyCar || Game.instance.sessionManager.flag == SessionManager.Flag.VirtualSafetyCar)))
             {
-                
-                
+
+
                 if (vehicle.timer.currentSector == Game.instance.sessionManager.yellowFlagSector && Game.instance.sessionManager.flag == SessionManager.Flag.Yellow)
                 {
                     SetErs(vehicle, ERSController.Mode.Harvest);
@@ -886,14 +887,11 @@ namespace Assistant
 
                 Behaviour behaviour = SelectBehaviour(vehicle);
 
-
-                
-
-                if ( GetLapsRemainingDecimal(vehicle) < 1)
+                if (GetLapsRemainingDecimal(vehicle) < 1)
                 {
                     int currentGate = vehicle.timer.lastActiveGateID;
                     int gateCount = Game.instance.sessionManager.GetAllGateTimers().Length; //Super dirty but idk where the gates ares
-                    if ( (gateCount - currentGate - 1) < GetGatesRemaininginPowerMode(vehicle))
+                    if ((gateCount - currentGate - 2) < GetGatesRemaininginPowerMode(vehicle))
                     {
                         SetErs(vehicle, ERSController.Mode.Power);
                         return;
@@ -1096,7 +1094,7 @@ namespace Assistant
                 vehicle.performance.fuel.SetEngineMode(Fuel.EngineMode.Low);
                 return;
             }
-            
+
             if (!options.engine || Game.instance.sessionManager.eventDetails.currentSession.sessionType != SessionDetails.SessionType.Race) return;
 
             var mode = Fuel.EngineMode.Medium;
@@ -1141,11 +1139,11 @@ namespace Assistant
             else
             {
                 //If we don't have enough fuel we save it, if we have too much fuel we use it
-                if (fuelLapsRemainingDecimal < (lapLeft + 0.02) * lowConsum)
+                if (fuelLapsRemainingDecimal < (lapLeft + 0.01) * lowConsum)
                 {
                     mode = Fuel.EngineMode.Low;
                 }
-                else if (fuelLapsRemainingDecimal < (lapLeft + 0.02) * medConsum)
+                else if (fuelLapsRemainingDecimal < lapLeft * medConsum)
                 {
                     mode = Fuel.EngineMode.Medium;
                 }
@@ -1277,15 +1275,15 @@ namespace Assistant
                 {
                     option = Main.settings.driver2AssistOptions;
                     tyreLog = Assistant.tyre2;
-                   
+
                 }
-                
+
 
                 Assistant.AssistDrive(option, vehicle, tyreLog);
                 Assistant.AssistERS(option, vehicle);
                 Assistant.AssistEngine(option, vehicle);
 
-                
+
 
                 if (inGateID == 30)
                 {
