@@ -406,10 +406,7 @@ namespace Assistant
             {
                 defend = false;
             }
-
-
-
-
+            
 
             //If the vehicle ahead is our teammate and we have to let him ahead, we save fuel and tyre
             if (!defend && teamMateAhead && gapAhead < 2f)
@@ -675,9 +672,7 @@ namespace Assistant
                             {
                                 relayPercent = lapsInRelay / relayLength;
 
-                                Main.logger.Log(tyreWear.ToString());
-
-                                if (relayPercent > clifCondition && (relayPercent - clifCondition) > tyreWear)
+                                if (relayPercent > clifCondition && (relayPercent - clifCondition) > tyreWear - 0.05f)
                                 {
                                     mode = DrivingStyle.Mode.Push;
                                 }
@@ -786,11 +781,26 @@ namespace Assistant
 
         }
 
+        internal static int GetGatesRemaininginPowerMode(RacingVehicle vehicle)
+        {
+            DesignData designData = DesignDataManager.instance.GetDesignData();
+            bool mIsAdvancedERSActive = vehicle.championship.rules.isERSAdvancedModeActive;
+            Supplier supplier = ((!mIsAdvancedERSActive) ? null : vehicle.car.ChassisStats.supplierERSAdvanced);
+            float powerDrainRate = designData.ERSDesignData.largeBatterySize / ((!mIsAdvancedERSActive) ? designData.ERSDesignData.powerModeRate : ((float)supplier.powerGates));
+
+            float num = vehicle.ERSController.normalizedCharge * vehicle.ERSController.maxCharge;
+            int num2 = 0;
+            while (num >= 0f)
+            {
+                num -= powerDrainRate;
+                num2++;
+            }
+            return num2 - 1;
+        }
 
         internal static void AssistERS(DriverAssistOptions options, RacingVehicle vehicle)
         {
-
-
+            
             if (!options.ers || Game.instance.sessionManager.eventDetails.currentSession.sessionType != SessionDetails.SessionType.Race)
             {
                 vehicle.ERSController.autoControlERS = true;
@@ -806,7 +816,7 @@ namespace Assistant
             //In game, the ERS should be set to "Auto" and not "manual". I guess the UI take the control if it's set to manual.
             vehicle.ERSController.autoControlERS = false;
 
-            if (vehicle.ERSController.normalizedCharge < 0.20)
+            if (vehicle.ERSController.normalizedCharge < 0.10)
             {
                 return;
             }
@@ -824,22 +834,36 @@ namespace Assistant
 
             if (hybrideEnabled)
             {
+
+                if(vehicle.timer.lap == 0 && vehicle.championship.rules.raceStart == ChampionshipRules.RaceStart.StandingStart) //Can't use power on the first lap of standing start
+                {
+                    if(vehicle.ERSController.normalizedCharge > 0.99)
+                    {
+                        SetErs(vehicle, ERSController.Mode.Hybrid);
+                    }
+                    else if (vehicle.ERSController.normalizedCharge < 0.96)
+                    {
+                        SetErs(vehicle, ERSController.Mode.Harvest);
+                    }
+                    return;
+                }
+
                 //If we don't have enough fuel to finish the race, immediatly use the hybrid mode
-                if ((lapLeft + 0.2) * GetFuelBurnRate(vehicle, Fuel.EngineMode.Low) > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
+                if (lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.Low) > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
                 {
                     SetErs(vehicle, ERSController.Mode.Hybrid);
                     return;
                 }
 
                 //If we barely have enough fuel, wait before using the hybride mode so that the power mode is available if needed
-                if (vehicle.ERSController.normalizedCharge > 0.6 && (lapLeft + 0.2) * GetFuelBurnRate(vehicle, Fuel.EngineMode.Medium) > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
+                if (vehicle.ERSController.normalizedCharge > 0.3 && lapLeft * GetFuelBurnRate(vehicle, Fuel.EngineMode.Medium) > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
                 {
                     SetErs(vehicle, ERSController.Mode.Hybrid);
                     return;
                 } 
                 else
                 {
-                    if (vehicle.ERSController.isInHybridMode && (lapLeft + 0.2) * GetFuelBurnRate(vehicle, Fuel.EngineMode.Medium) > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
+                    if (vehicle.ERSController.isInHybridMode && (lapLeft) * GetFuelBurnRate(vehicle, Fuel.EngineMode.Medium) > vehicle.performance.fuel.GetFuelLapsRemainingDecimal())
                     {
                         return;
                     }
@@ -849,6 +873,8 @@ namespace Assistant
 
             if (powerEnabled && !((Game.instance.sessionManager.flag == SessionManager.Flag.SafetyCar || Game.instance.sessionManager.flag == SessionManager.Flag.VirtualSafetyCar)))
             {
+                
+                
                 if (vehicle.timer.currentSector == Game.instance.sessionManager.yellowFlagSector && Game.instance.sessionManager.flag == SessionManager.Flag.Yellow)
                 {
                     SetErs(vehicle, ERSController.Mode.Harvest);
@@ -859,6 +885,20 @@ namespace Assistant
                 float minGap = Assistant.getMinGap(vehicle);
 
                 Behaviour behaviour = SelectBehaviour(vehicle);
+
+
+                
+
+                if ( GetLapsRemainingDecimal(vehicle) < 1)
+                {
+                    int currentGate = vehicle.timer.lastActiveGateID;
+                    int gateCount = Game.instance.sessionManager.GetAllGateTimers().Length; //Super dirty but idk where the gates ares
+                    if ( (gateCount - currentGate - 1) < GetGatesRemaininginPowerMode(vehicle))
+                    {
+                        SetErs(vehicle, ERSController.Mode.Power);
+                        return;
+                    }
+                }
 
                 if (behaviour == Behaviour.Attack || behaviour == Behaviour.Both)
                 {
@@ -873,7 +913,7 @@ namespace Assistant
                 else if (behaviour == Behaviour.Defend)
                 {
                     //Only use power if we're about to be overtaken
-                    if (minGap * 2 < vehicle.ERSController.normalizedCharge)
+                    if (GetGapBeheind(vehicle) * 1.5 < vehicle.ERSController.normalizedCharge)
                     {
                         SetErs(vehicle, ERSController.Mode.Power);
                         return;
@@ -1056,7 +1096,7 @@ namespace Assistant
                 vehicle.performance.fuel.SetEngineMode(Fuel.EngineMode.Low);
                 return;
             }
-
+            
             if (!options.engine || Game.instance.sessionManager.eventDetails.currentSession.sessionType != SessionDetails.SessionType.Race) return;
 
             var mode = Fuel.EngineMode.Medium;
